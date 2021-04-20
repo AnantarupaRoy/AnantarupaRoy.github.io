@@ -1,6 +1,6 @@
-name: Solar Theme
+name: Blogs@MaskdMafia
 url: https://bitcriminals.github.io/
-description: A stylish blog using the Solarized color palette
+description: Student and CyberSecurity Enthusiast 
 
 permalink: /:year/:month/:day/:title/
 paginate: 10
