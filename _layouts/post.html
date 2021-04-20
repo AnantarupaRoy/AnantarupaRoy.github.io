@@ -6,7 +6,7 @@ layout: default
 	{% if page.external-url %}
 		<h1>
 			<a href="{{ page.external-url }}">{{ page.title }}</a> 
-			<a class="anchor" href="{{ page.url }}"><i class="icon-anchor"></i></a>
+			<a class="anchor" href="{{ page.url }}"></a>
 		</h1>
 	{% else %}
 		<h1><a href="{{ page.url }}">{{ page.title }}</a></h1>
@@ -17,3 +17,4 @@ layout: default
 	<p class="meta">Posted on <span class="postdate">{{ page.date | date: "%b %d, %Y" }}</span></p>
 
 </article>
+<!-- <i class="icon-anchor"></i> -->
