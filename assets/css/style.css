@@ -33,7 +33,7 @@ table {
 /*** Basics ***/
 body {
 	font-family: Verdana, serif;
-	font-size: 13px;
+	font-size: 15px;
 	line-height: 1.7;
 }
 
@@ -77,15 +77,15 @@ acronym, abbr {
 
 
 h1 {
-	font-size: 17px;
+	font-size: 18px;
 	margin: 0 0 10px 0;
 }
 h2 {
-	font-size: 16px;
+	font-size: 17px;
 	margin: 0 0 10px 0;
 }
 h3 {
-	font-size: 15px;
+	font-size: 16px;
 	margin: 0 0 10px 0;
 }
 
@@ -137,6 +137,7 @@ h3 {
 #content {
 	width: 500px;
 	margin: 0 auto;
+	/* font-size: ; */
 }
 
 #sidebar {
