@@ -9,6 +9,7 @@ html, body, div, span, applet, object, iframe, h1, h2, h3, h4, h5, h6, p, blockq
 }
 article, aside, details, figcaption, figure, footer, header, hgroup, menu, nav, section {
 	display: block;
+	
 }
 body {
 	line-height: 1;
@@ -33,7 +34,7 @@ table {
 /*** Basics ***/
 body {
 	font-family: Verdana, serif;
-	font-size: 16px;
+	font-size: 15px;
 	line-height: 1.7;
 }
 
@@ -47,7 +48,8 @@ a:hover {
 	color: #000000;
 }
 
-p, pre { margin-bottom: 15px; }
+p, pre { margin-bottom: 15px;
+\ }
 ul, ol { padding: 0 0 18px 30px; }
 ol li, ul li { margin-top: 10px; margin-bottom: 10px; }
 em, i { font-style: italic; }
@@ -77,15 +79,16 @@ acronym, abbr {
 
 
 h1 {
-	font-size: 18px;
-	margin: 0 0 10px 0;
-}
-h2 {
 	font-size: 17px;
 	margin: 0 0 10px 0;
 }
-h3 {
+h2 {
 	font-size: 16px;
+	margin: 0 0 10px 0;
+	text-align: center;
+}
+h3 {
+	font-size: 15px;
 	margin: 0 0 10px 0;
 }
 
@@ -109,7 +112,7 @@ h3 {
 
 /*** Structure ***/
 #page {
-	width: 500px;
+	width: 1000px;
 	margin: 0 auto;
 	position: relative;
 }
@@ -119,25 +122,28 @@ h3 {
 	margin: 40px auto 50px auto;
 }
 #header h1 {
-	font-size: 32px;
+	font-size: 30px;
 	margin-bottom: 4px;
+	text-align: center;
 }
 #header h1 a {
 	border: none;
+	text-align: center;
 }
 
 #footer {
-	width: 500px;
+	width: 1000px;
 	margin: 50px auto 20px auto;
 	padding-top: 10px;
 	font-size: 0.85em;
 	border-top: 1px solid #073642;
+	text-align: center;
 }
 
 #content {
-	width: 500px;
+	width: 1000px;
 	margin: 0 auto;
-	/* font-size: ; */
+	font-size: 15px ;
 }
 
 #sidebar {
@@ -168,7 +174,7 @@ article {
 }
 
 article h1 {
-	font-size: 17px;
+	font-size: 20px;
 	margin: 0 0 10px 0;
 }
 article h1 a {
