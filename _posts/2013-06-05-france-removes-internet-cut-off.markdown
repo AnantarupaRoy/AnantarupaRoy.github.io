@@ -1,6 +1,6 @@
 ---
 layout: post
-title:  "France Removes Internet Cut-Off Threat From its Anti-Piracy Law"
-date:   2013-06-05 20:33:11
-external-url: http://arstechnica.com/tech-policy/2013/06/france-removes-internet-cut-off-threat-from-its-anti-piracy-law/
+title:  "Participating in CTFs with my teammates in Bit Criminals"
+date: 2021-20-04
+external-url: https://bitcriminals.github.io/
 ---
