@@ -5,11 +5,9 @@ date:   2021-05-05 17:06:25
 categories: CTF writeups
 ---
 
-# Masrt
+**# Masrt**
 
-### Crypto
-
-### Points: 1000
+# Category: Crypto | Points: 1000
 
 Prompt: Masrt was in a hurry, he wanted to get the challenges for Glimpse done asap before his vacation. Thinking Naughtyb0y wouldn't notice, he decided to encrypt several messages with the same key.
 
@@ -20,7 +18,7 @@ Being over-cautious, he also installed a pow system so that only select few get 
 connect @ nc ctf.glimpse-of-ism.ml 6001
 use fr0st_is_my_arch_nemesis as access password
 
-## Solution
+# Solution
 
 Connecting using the above command asks us to say the string which satisfies the condition: sha256(string)[-6:] --> xxxxxx
 
