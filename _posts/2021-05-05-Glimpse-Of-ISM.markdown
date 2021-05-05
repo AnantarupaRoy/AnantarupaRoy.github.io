@@ -7,7 +7,7 @@ categories: CTF writeups
 
 # Masrt
 
-## Crypto
+### Crypto
 
 ### Points: 1000
 
