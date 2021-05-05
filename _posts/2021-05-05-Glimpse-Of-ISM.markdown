@@ -1,11 +1,9 @@
 ---
 layout: post
-title:  "Glimpse Of ISM"
+title:  "Glimpse Of ISM - Masrt"
 date:   2021-05-05 17:06:25
 categories: CTF writeups
 ---
-
-**# Masrt**
 
 # Category: Crypto | Points: 1000
 
