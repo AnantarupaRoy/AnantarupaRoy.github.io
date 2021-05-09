@@ -1,0 +1,34 @@
+---
+layout: post
+title:  "DawgCTF-2021"
+date:   2021-05-09 17:06:25
+categories: CTF writeups
+---
+
+# Deserted Island Toolkit
+
+# Category: Audio/Radio | Points: 150
+
+Prompt: What would a drunken sailor do? (Wrap the output in DawgCTF{ })
+[DesertedIslandToolkit.zip](https://drive.google.com/file/d/1vYUIAPIeQgE6x781tH6SU3uU0YSx5Yxv/view?usp=sharing)
+Author: Eyeclept
+
+# Solution 
+
+Unzipping the contents we find that we have been given a .iso file. So we extract the contents in a separate folder to find the following two extracted files :
+
+![](/images/DawgCTF1.png)
+
+Well, googling about .cdda files I found out that it is CD Digital Audio Format, so I went ahead and converted it to mp3 via an online convertor just for the sake of convenience.
+
+[Online CDDA to MP3 convertor](https://convertio.co/cdda-mp3/)
+
+Listened to the converted file and it sounded suspiciously like Morse Code, so yea, I took the freedom to go ahead and upload the file in an online Morse Code Decoder.
+
+[Online Morse Code Decoder](https://morsecode.world/international/decoder/audio-decoder-adaptive.html)
+
+And we got our flag!
+
+![](/images/DawgCTF2.png)
+
+Flag:***DawgCTF{SOSISNOTTHEAN5W3R}***
