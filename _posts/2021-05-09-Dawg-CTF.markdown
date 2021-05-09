@@ -60,8 +60,7 @@ with open("wordlists.txt", "w") as p:
     for i in range(4000):
         p.write("umbc" + str(i) + '\n')
     for i in range(4000):
-        p.write(str(i) + "umbc" + '\n')
-        
+        p.write(str(i) + "umbc" + '\n')        
 ```
 
 ![](/images/DawgCTF3.png)
