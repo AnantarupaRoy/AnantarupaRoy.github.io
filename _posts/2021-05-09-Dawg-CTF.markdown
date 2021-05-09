@@ -65,6 +65,8 @@ with open("wordlists.txt", "w") as p:
 
 ![](/images/DawgCTF3.png)
 
+This unzips all the photos inside the zip file. Using the file command on the second file shows it has ASCII text instead of picture. And using the cat command on the second file gives our flag.
+
 ![](/images/DawgCTF4.png)
 
 Flag: ***DawgCTF{P1ctur35qu3}***
