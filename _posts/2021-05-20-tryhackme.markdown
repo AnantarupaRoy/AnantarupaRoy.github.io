@@ -47,12 +47,12 @@ The sqlite_master contains the following columns:
 ```
 The sqlite_master table contains the following columns:
 
-Column Name	Description
-type	          The type of database object such as table, index, trigger or view.
-name	        The name of the database object.
+Column      Description
+type	      The type of database object such as table, index, trigger or view.
+name	      The name of the database object.
 tbl_name	  The table name that the database object is associated with.
 rootpage	  Root page.
-sql	          SQL used to create the database object.
+sql	        SQL used to create the database object.
 
 ```
 So I basically have to display the information stored in tbl_name column.
