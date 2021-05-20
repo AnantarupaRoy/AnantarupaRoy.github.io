@@ -1,6 +1,6 @@
 ---
 layout: post
-title:  "Unstable Twin"
+title:  "Tryhackme - Unstable Twin"
 date:   2021-05-20 17:06:25
 categories: Pentesting
 ---
@@ -28,7 +28,6 @@ To get the build version we send a request to /info
 
 ```py
 curl -i -s http://10.10.196.16/info
-
 ```
 However it returned 1.3.6-final (which did not turn out to be the correct answer),so I thought it is some machine error and so I sent the request again and (much to my bewilderment) got a different build version.
 
@@ -49,11 +48,11 @@ The sqlite_master contains the following columns:
 The sqlite_master table contains the following columns:
 
 Column Name	Description
-type	        The type of database object such as table, index, trigger or view.
+type	          The type of database object such as table, index, trigger or view.
 name	        The name of the database object.
-tbl_name	The table name that the database object is associated with.
-rootpage	Root page.
-sql	        SQL used to create the database object.
+tbl_name	  The table name that the database object is associated with.
+rootpage	  Root page.
+sql	          SQL used to create the database object.
 
 ```
 So I basically have to display the information stored in tbl_name column.
