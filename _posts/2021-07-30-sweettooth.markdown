@@ -1,6 +1,6 @@
 ---
 layout: post
-title:  "HackTheBox - Mango"
+title:  "TryHackMe - Sweethtooth inc. "
 date:   2021-07-29 17:06:25
 categories: Pentesting
 ---
