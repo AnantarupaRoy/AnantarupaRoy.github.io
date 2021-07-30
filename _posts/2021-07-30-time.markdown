@@ -2,7 +2,7 @@
 layout: post
 title:  "HackTheBox - Time"
 date:   2021-07-30 17:06:25
-categories: CTF writeups
+categories: Pentesting
 ---
 
 # ENUMERATION
