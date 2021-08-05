@@ -1,0 +1,62 @@
+---
+layout: post
+title:  "HackTheBox - Grandpa"
+date:   2021-08-05 17:06:25
+categories: Pentesting
+---
+
+# ENUMERATION
+
+```
+PORT   STATE SERVICE VERSION
+80/tcp open  http    Microsoft IIS httpd 6.0
+| http-methods: 
+|   Supported Methods: OPTIONS TRACE GET HEAD COPY PROPFIND SEARCH LOCK UNLOCK DELETE PUT POST MOVE MKCOL PROPPATCH
+|_  Potentially risky methods: TRACE COPY PROPFIND SEARCH LOCK UNLOCK DELETE PUT MOVE MKCOL PROPPATCH
+|_http-server-header: Microsoft-IIS/6.0
+|_http-title: Under Construction
+| http-webdav-scan: 
+|   Allowed Methods: OPTIONS, TRACE, GET, HEAD, COPY, PROPFIND, SEARCH, LOCK, UNLOCK
+|   Server Date: Wed, 04 Aug 2021 14:49:45 GMT
+|   WebDAV type: Unknown
+|   Public Options: OPTIONS, TRACE, GET, HEAD, DELETE, PUT, POST, COPY, MOVE, MKCOL, PROPFIND, PROPPATCH, LOCK, UNLOCK, SEARCH
+|_  Server Type: Microsoft-IIS/6.0
+Service Info: OS: Windows; CPE: cpe:/o:microsoft:windows
+```
+
+# FOOTHOLD
+
+Searching for iis 6.0 webdav I get these many results from searchsploit :
+
+```
+Microsoft IIS 6.0 - WebDAV 'ScStoragePathFromUrl' R | windows/remote/41738.py
+Microsoft IIS 6.0 - WebDAV Remote Authentication By | windows/remote/8704.txt
+Microsoft IIS 6.0 - WebDAV Remote Authentication By | windows/remote/8754.patch
+Microsoft IIS 6.0 - WebDAV Remote Authentication By | windows/remote/8765.php
+Microsoft IIS 6.0 - WebDAV Remote Authentication By | windows/remote/8806.pl
+```
+I decided to try the perl and the php scripts but nothing worked . I thought since "patch management" was in the tags it might work but nope, I was wrong again, so I finally tried the buffer overflow script but well, the script got stuck in the middle , so I googled the same script on the internet (hey it did work half) and I got an improved script which was successful in giving me a shell !!
+
+[Improved BufferOverflow Script](https://raw.githubusercontent.com/g0rx/iis6-exploit-2017-CVE-2017-7269/master/iis6%20reverse%20shell)
+
+# PRIVILEGE ESCALATION
+
+In "Documents and Settings we find a user Harry but we dont have access to his directory . Now in the "All Users" directory's Desktop I found a "Security Configuration Wizard.lnk" so I thought that might have something to do with privilege escalation, but even after a lot of finding when it didn't work I decided to give windows exploit suggestor a try.
+
+It returned various CVEs. I tried a few promising ones  such as ms14_058, ms14_070,ms15_051 but we didn't have all the permissions required to successfully complete these exploits , so I opened a shell via msfconsole and used its local exploit suggestor module which showed me this : 
+
+```s
+[+] 10.10.10.14 - exploit/windows/local/ms10_015_kitrap0d: The service is running, but could not be validated.
+[+] 10.10.10.14 - exploit/windows/local/ms14_058_track_popup_menu: The target appears to be vulnerable.
+[+] 10.10.10.14 - exploit/windows/local/ms14_070_tcpip_ioctl: The target appears to be vulnerable.
+[+] 10.10.10.14 - exploit/windows/local/ms15_051_client_copy_image: The target appears to be vulnerable.
+[+] 10.10.10.14 - exploit/windows/local/ms16_016_webdav: The service is running, but could not be validated.
+[+] 10.10.10.14 - exploit/windows/local/ppr_flatten_rec: The target appears to be vulnerable.
+```
+I decided to go with the second module (first could not be validated).But it did not give me a shell so on to the third and it did give a shell ( well it took really long for me cuz my vpn would go away every few mins so yea , frustrating , not to mention I had to manually upload nc.exe via meterpreter and run it to get a normal reverse shell because I feel msfconsole shells are a bit slow so I dont understand if it has got stuck or if it is actually executing a command in the background , gotta improve my patience huh? )
+
+User flag was in c:\documents and settings\harry\desktop
+
+Root flag was in c:\documents and settings\administrator\desktop
+
+This box had an easy tag and a whole lot of solves , and was really interesting , but hey had to spend a lot of time enumerating and on errors thrown by metasploit while privilege escalation , but it was an enjoyable machine overall.
